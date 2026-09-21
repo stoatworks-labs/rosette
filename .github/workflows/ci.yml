@@ -1,0 +1,96 @@
+name: ci
+
+# Both platforms on every push and pull request, so a Dependabot bump has a
+# status check to gate on and a GLEW-shaped break -- which macOS is
+# structurally blind to, because macOS never links GLEW -- is caught before a
+# tag. There is no Linux job: the CMakeLists branches on APPLE and WIN32, and
+# Resolume has no Linux build.
+#
+# NOTE: this workflow has never run. The repo has no remote yet.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The FFGL SDK is a submodule. Without this CMake fails at configure
+          # time with a missing-directory error that reads like a broken repo.
+          submodules: recursive
+
+      - name: Configure
+        # arm64 only, unlike the release build's universal arm64;x86_64 -- the
+        # second slice doubles the build for no extra signal, because a source
+        # break is not architecture-specific.
+        #
+        # ROSETTE_BUILD_TOOLS is ON here where the release build turns it OFF:
+        # rztest is where the printing model is written down a second time, so
+        # compiling and running it is most of the value.
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DROSETTE_BUILD_TOOLS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: The suites
+        # The runner has no GPU, so these fall back to software rasterisation.
+        # --names, --defaults, --presets and --wander need no GL at all; the
+        # rest render small frames and are deterministic.
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Presets
+        run: python3 tools/check_presets.py
+
+      - name: Controls
+        # At 320x180, because the runner has no GPU and the question is only
+        # whether a control changed ANY subpixel. Two at a time on a
+        # three-core runner; graticule learned that an eight-wide pool at
+        # 320x180 was still going at twenty minutes.
+        timeout-minutes: 25
+        run: python3 tools/sweep.py --size 320x180 --jobs 2
+
+      # Uploading is not only for the artefact. This repo has no package
+      # manifest, so github-actions is its only Dependabot ecosystem -- and a
+      # bump to actions/upload-artifact otherwise touches release.yml alone,
+      # a workflow no pull request ever runs.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rosette-macos-arm64
+          path: build/*.bundle
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        # The toolchain path MUST stay double-quoted: a `run:` step on Windows
+        # is PowerShell, and unquoted this expands to nothing.
+        run: >
+          cmake -B build -A x64
+          -DCMAKE_BUILD_TYPE=Release
+          -DROSETTE_BUILD_TOOLS=OFF
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rosette-windows-x86_64
+          path: build/Release/*.dll
+          if-no-files-found: error

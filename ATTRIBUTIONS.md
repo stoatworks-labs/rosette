@@ -1,0 +1,70 @@
+# Attributions
+
+Rosette is built on other people's work. This file lists what that work is, who
+did it, and what it is doing here.
+
+> **Provisional.** Across the fleet this file is generated from master lists in
+> `stoatworks-backend` by `scripts/sync-attributions.py`. Rosette is not
+> registered there yet, so this copy is hand-written. Register it before release
+> — and note that the script's `--only` flag truncates the file rather than
+> filtering it.
+
+## Third-party code this project uses
+
+### Resolume FFGL SDK
+
+<https://github.com/resolume/ffgl>
+Licence: BSD-3-Clause
+Copyright: FreeFrame
+
+Vendored as a git submodule at `external/ffgl`, pinned to `b1afaf9`.
+
+The plugin ABI itself. An FFGL effect is defined by this SDK's headers — there
+is no other way to be loadable by Resolume Arena and Avenue.
+
+### GLEW — the OpenGL Extension Wrangler Library
+
+<https://github.com/nigels-com/glew>
+Licence: BSD-3-Clause (with Mesa 3-D and Khronos components)
+Copyright: Milan Ikits, Marcelo E. Magallon and Lev Povalahev
+
+Windows only, from vcpkg, statically linked. The SDK's headers pull it in for
+the OpenGL function pointers; macOS uses the system OpenGL framework instead.
+
+### zlib
+
+<https://zlib.net>
+Licence: zlib
+Copyright: Jean-loup Gailly and Mark Adler
+
+Ships with macOS. Linked by the offline harness only, which writes its PNGs
+with it rather than carrying an image library.
+
+## Work from elsewhere in the fleet
+
+### tinsel, macroblock, graticule
+
+<https://github.com/stoatworks-labs>
+Licence: MIT
+Copyright: Stoatworks Labs
+
+`source/PassBuffer.*` and `source/Diag.*` are tinsel's, renamed into this
+namespace. The audio analyser is adapted from macroblock's, reduced to the one
+band this effect needs. The preset-override shape, the provisional About
+header and the release-job-locally checks in `tools/verify.sh` follow
+graticule's.
+
+## Method
+
+The halftone screening here is implemented from the published description of
+how screening works — spot functions and threshold arrays as PostScript
+defines them, the Murray–Davies relation between dot area and density, and the
+multiplicative (Beer–Lambert style) overprint every ink model rests on. No
+vendor's screening algorithm, threshold array or ICC characterisation was used
+or consulted, and the ink colours are the values the printing trade quotes
+rather than a measured characterisation of anyone's press.
+
+## Getting this wrong
+
+If your work is here and the description is inaccurate, the licence is wrong, or
+you would rather not be listed — open an issue and it will be fixed.
