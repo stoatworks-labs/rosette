@@ -310,9 +310,10 @@ Arena 7.27.1, build 15990):
 
 - **The x64 DLL builds and exports the entry point.** It is **cross-compiled in
   the Parallels guest** on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
-  `cmake -A x64`, vcpkg triplet `x64-windows-static-md`); there is no x64
-  Windows machine in the build loop. `Rosette.dll` is **380,928 bytes** and
-  `dumpbin /EXPORTS` shows **`plugMain`**.
+  `cmake -A x64`, vcpkg triplet `x64-windows-static-md`), because there is no
+  x64 Windows machine in the *local* build loop. `Rosette.dll` is **380,928
+  bytes** and `dumpbin /EXPORTS` shows **`plugMain`**. CI builds x64 Windows
+  itself, but that build has never been in front of Arena.
 - **Arena registers it.** `/api/v1/effects` lists `SW Rosette` among 112 video
   effects, under `idstring` **`RZ01`**, with the description the plugin
   declares.
