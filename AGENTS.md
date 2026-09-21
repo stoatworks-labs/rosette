@@ -11,7 +11,8 @@ touching the spot functions, the threshold table or the separation.
 
 Built 2026-09-21 in one session, from the fleet's templates (tinsel for the
 passes, harness, verify and CI; macroblock for the audio analyser; graticule
-for the preset-override shape and the provisional About header).
+for the preset-override shape and the About header, which started as a hand copy
+of graticule's and is generated now).
 
 ---
 
@@ -284,7 +285,7 @@ prove nothing.
   picture (`tools/sweep.py`), with the FFT buffer and the four About buttons
   skipped for stated reasons.
 - **The build is universal and registers a plugin** — `lipo` reports
-  `x86_64 arm64`, `nm -gU` finds `_plugMain`, the bundle ad-hoc signs, and
+  `x86_64 arm64`, `nm -gU` finds `_plugMain`, a local bundle ad-hoc signs, and
   `oxbow probe` reads back **SW Rosette / RZ01 / effect**, which is the only
   check here that sees what a host sees.
 - **Presets survive every host behaviour.** All six rows against three hosts —
@@ -350,7 +351,9 @@ macOS-only.
 - **No long session, no composition save or reload and no preset recall** were
   exercised in the host, and nothing was tested against a Windows Resolume
   licence beyond what the running copy provides.
-- The CI workflows have never executed: the repo has no remote.
+- CI has run and passed on GitHub — macOS and x64 Windows both — and so has the
+  release workflow. Neither of those Windows builds has been put in front of
+  Arena; the DLL that ran there was the hand-built one.
 - **The 64 spectrum bins are assumed to be linear in frequency and
   low-first**, as the rest of the fleet assumes. Nothing here has seen
   Resolume's own FFT — only the harness's synthetic spectrum — so the audio
@@ -369,13 +372,14 @@ macOS-only.
 - **No OpenFX port and no browser demo.** Neither is required for 0.1.0.
 - **No user guide**, which is why `StoatworksAbout.h` carries `guide = ""` —
   a link that is not written is left out rather than shown as a button that
-  opens a 404. That header and `ATTRIBUTIONS.md` are **provisional hand
-  copies** in the shape the fleet's sync scripts generate, exactly as
-  graticule's are. Register the project in `stoatworks-website`'s
-  `projects.json`, `stoatworks-backend`'s `sync-about.py` TARGETS and
-  `attributions/names.json`, and re-run the syncs before any release. The
-  About facts were chosen so the button count — and therefore the parameter
-  count — does not change when it is regenerated.
+  opens a 404. That header is **generated** now: the project is registered in
+  `stoatworks-website`'s `projects.json`, in `stoatworks-backend`'s
+  `sync-about.py` TARGETS and in `attributions/names.json`, so do not hand-edit
+  it. The About facts were chosen so the button count — and therefore the
+  parameter count — does not change when it is regenerated.
+  `ATTRIBUTIONS.md` is still a **provisional hand copy** in the shape the
+  fleet's sync scripts generate, because `sync-attributions.py`'s own master
+  lists do not know this repo yet.
 
 ## Open questions
 

@@ -139,18 +139,20 @@ measures rather than previews:
 | CMYK round trip | with no plate screened, **0.0016**; with a screened plate, 0.0415 at a 2 px cell falling to 0.0069 at 16 px |
 | Press wander | bounded (9.545 of 10 px), smooth (0.2174 px/frame), different per plate (8.15 px apart), exactly zero at zero |
 | Audio | silence moves nothing at full drive; 3 onsets in two seconds; plates thrown 23.6 px |
-| No dead controls | all **44** parameters measurably change the picture |
-| macOS binary | universal (`x86_64 arm64`), exports `plugMain`, ad-hoc signs |
+| No dead controls | all **44 sweepable** of the **49** parameters the plugin declares measurably change the picture; the other five are the FFT buffer and the four About buttons, which `tools/sweep.py` skips for stated reasons |
+| macOS binary | a local build is universal (`x86_64 arm64`), exports `plugMain`, and ad-hoc signs |
 | Host metadata | `oxbow probe` reads **SW Rosette / RZ01 / effect** |
 | Render cost | 0.15 ms/frame at 720p, 0.23 at 1080p, 0.50 at 4K — 3% of a 60 fps frame |
 
 Run `tools/verify.sh` before believing any of it.
 
-**In a real host, once.** On 2026-09-21 the x64 Windows DLL was cross-compiled
+**In a real host, once.** On 2026-09-21 an x64 Windows DLL was cross-compiled
 in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
 `cmake -A x64`, vcpkg triplet `x64-windows-static-md` — there is no x64 Windows
-machine in the build loop) and taken to win-lab, an x64 Windows 11 Pro VM with
-**no GPU**, where OpenGL comes from Mesa llvmpipe dropped in beside Arena:
+machine in the *local* build loop) and taken to win-lab, an x64 Windows 11 Pro VM
+with **no GPU**, where OpenGL comes from Mesa llvmpipe dropped in beside Arena.
+That is the build in the table below; the released DLL is a separate one, built on
+a GitHub runner, and has not been in front of Arena:
 
 | Check | Result |
 | --- | --- |
@@ -169,18 +171,18 @@ the proof of instantiation is the diag log, not the clip's effect list.
 **Not yet done.** It has **never run on a GPU in Resolume** — the one host run
 was on llvmpipe — and it has **never been instantiated in Arena on macOS**.
 Arena drew an inspector for it, but nothing in that inspector was checked
-beyond its appearing, so how the parameters *present* — whether 49 controls in
-six groups read sensibly, whether the five colour triples show as swatches —
+beyond its appearing, so how the parameters *present* — whether the 49 controls
+in six groups read sensibly, whether the five colour triples show as swatches —
 is still untested. No real audio has reached the plugin in a host; the audio
 path is still only exercised by the harness's synthetic spectra, and
 Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
 no composition save or reload and no preset recall were exercised in the host,
 and whether the plugin settles on Resolume's clock unit is unconfirmed — see
-[AGENTS.md](AGENTS.md). The CI workflows here have never executed, because the
-repo has no remote yet. There is no OpenFX port and no browser demo; neither is
-required for 0.1.0. `source/StoatworksAbout.h` and `ATTRIBUTIONS.md` are
-provisional hand copies, and there is no user guide, so the About block
-deliberately carries no guide link. No release tag.
+[AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
+workflow have both run and passed on GitHub. There is no OpenFX port and no
+browser demo; neither is required for 0.1.0. `ATTRIBUTIONS.md` is still a
+provisional hand copy, and there is no user guide, so the About block
+deliberately carries no guide link.
 
 [AGENTS.md](AGENTS.md) has the full list of what is assumed rather than
 measured, and the traps.
