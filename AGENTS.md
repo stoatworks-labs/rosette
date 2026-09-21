@@ -227,6 +227,9 @@ provably never wanders.
     tools/rztest/              the offline harness.
     tools/sweep.py             no control is silently dead.
     tools/verify.sh            all of it.
+    demo/                      the browser demo. plugin.js carries a second
+                               copy of the GLSL; check_shaders.py holds the
+                               two together. vendor/ is synced, not edited.
 
 Two passes:
 
@@ -245,6 +248,86 @@ the print pass around it and `SpotProbeShaderSource()` assembles the harness's
 probe around the same string, so `--spot` runs *the text the plugin runs*. A
 test that compiled its own transcription would agree with itself perfectly and
 prove nothing.
+
+---
+
+## The browser demo
+
+`demo/` is the page at **rosette-demo.stoatworks-labs.com**, built on the shared
+kit in `infrastructure/stoatworks-backend/resolume-demo/`. Of the six plugins in
+that run this is the one that ports most completely, for a structural reason
+rather than a lucky one: everything the effect *is* — the four lattices at their
+angles, the spot function, the ranked threshold, the dot gain, the ink spread,
+the registration offsets and the multiplicative ink model — happens in the print
+pass. There is almost no CPU stage to leave behind.
+
+**What is the plugin's own code.** `kVertexShader`, `kSeparateShader`,
+`kSpotLibrary`, `kPrintPreamble` and `kPrintMain`, copied into `demo/plugin.js`
+character for character and assembled the way `PrintShaderSource()` assembles
+them. `demo/tools/check_shaders.py` compares all five and *also* checks the
+assembly order on both sides, and `tools/verify.sh` runs it. A shader whose
+pieces were all identical and whose order had changed would otherwise pass.
+
+**What is a port, checked by a reader and nothing else.** `Controls.cpp` in
+full; `Spot()` and `BuildThresholdTable()` from `Screen.cpp`; `Noise`,
+`latticeValue`, `quintic` and `Wander` from `Press.cpp`, over a JavaScript
+`hashInt` written with `Math.imul` so the PCG hash is exact in 32 bits rather
+than a double multiply that loses its low bits.
+
+That port was cross-checked by hand once, on 2026-09-21, and nothing re-runs it:
+`hashInt` agreed bit for bit with the C++ on 0 and 1, `press::Noise` agreed to
+1e-7 over twelve lane/time pairs (the residue is JavaScript's double against the
+plugin's float), the wander stayed inside its 20 px bound over 2000 simulated
+seconds, and the ported threshold table's printed area tracked its tone to
+0.4% measured on a 733x733 grid coprime with the 512x512 one the table is ranked
+on. To redo it, extract the port's functions out of `demo/plugin.js` into a
+`.mjs` and compile the C++ originals into a one-file program beside it.
+
+### The decisions, and why
+
+- **The audio side is absent, not approximated.** `Audio Drive` and the FFT
+  buffer are gone from the panel. A browser has no Resolume FFT parameter, and
+  asking a visitor for their microphone to demo a *video* effect is not a trade
+  worth making. The removal is exact rather than a simplification: with Audio
+  Drive at zero the plugin computes `shake` and `kick` as zero and
+  `press::Wander` returns `{0,0}` on its `amplitudePx <= 0` exit, so the page
+  computes the same plate offsets the plugin does in that state.
+- **Press Wander stays.** It is a pure function of time — which is exactly why
+  it survives the trip — and it is the same code, not a lookalike.
+- **The six presets are exposed, through the kit's preset dropdown rather than
+  as the `Preset` parameter.** A preset here is a whole press, which is worth
+  more on a demo page than any slider, and the kit supports it. The behaviour
+  differs from the plugin in a way the page states: in Resolume a preset is an
+  OVERRIDE read through `Effective()`, because the host does not consume value
+  events; in a browser there is no such constraint, so picking a row writes the
+  sliders. The cost is that picking one here also resets the registration
+  offsets, Solo and Mix, which `Presets.h` deliberately leaves to the operator.
+  A `Preset` parameter in the panel would have been a control that did nothing,
+  which is worse than one that is absent.
+- **The threshold table is built in the page, at full 512x512 ranking.** It is
+  the one CPU stage that had to come across: without it T(a) would have to be
+  `a`, a round dot's area would go as the square of the tone, and Dot Gain
+  would stop being the only thing between a tone and its printed area. A
+  quarter of a million samples sorted four times costs a couple of hundred
+  milliseconds once, at renderer construction. Sampling more coarsely is the
+  one shortcut that would show, and it would show as a *plausible* picture.
+- **`OES_texture_float_linear` is required, and its absence throws.** The
+  threshold table is an R32F texture read with a linear filter, as
+  `UploadThresholds()` uploads it. In WebGL2 a float texture with a LINEAR
+  filter and no extension is incomplete and samples as opaque black — every
+  threshold would read 0 and every plate would print solid. Failing with a
+  message beats rendering that.
+- **The kit has no vec2-array uniform setter.** `Offsets` goes up through a
+  local `setVec2Array`; `uniform1fv` into a `vec2[4]` is rejected as a size
+  mismatch and leaves the uniform holding zeros, i.e. a press in perfect
+  registration and two groups of controls that look live and are dead.
+
+### What the page cannot be evidence about
+
+GLSL ES 3.00 in a browser is not desktop GL 4.1 core, the driver and the
+rounding are not the same, and there is no Resolume around it. Everything that
+makes the model worth believing — `--spot`, `--gain`, `--angle`, `--register`,
+`--overprint`, `--identity` — is the offline harness, and the page says so.
 
 ---
 

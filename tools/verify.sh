@@ -16,6 +16,11 @@
 #                 overprint arithmetic, the round trip, the press wander and
 #                 the audio path
 #   presets       is every preset row the right width and kind
+#   demo          is the browser demo still running the plugin's own GLSL --
+#                 demo/plugin.js carries a second copy of every shader,
+#                 because a browser cannot include a C++ file, and two copies
+#                 of a shader is the arrangement that drifts invisibly: both
+#                 sides keep working and quietly stop being the same effect
 #   sweep         does every control change the picture
 #   registration  does the bundle contain a plugin at all -- a file-scope
 #                 CFFGLPluginInfo nothing names, which a linker may drop
@@ -177,6 +182,14 @@ if python3 tools/check_presets.py >/dev/null 2>&1; then
 else
 	python3 tools/check_presets.py | sed 's/^/   /'
 	fail "tools/check_presets.py"
+fi
+
+step "demo"
+if python3 demo/tools/check_shaders.py >/dev/null 2>&1; then
+	pass "demo/plugin.js runs the plugin's own shaders"
+else
+	python3 demo/tools/check_shaders.py | sed 's/^/   /'
+	fail "demo/tools/check_shaders.py"
 fi
 
 step "sweep"
