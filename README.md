@@ -22,6 +22,38 @@ Avenue.
 <sub>The repo's test card through the plugin at a coarse screen — rendered by
 `rztest`, the offline harness, not captured from Resolume.</sub>
 
+<!-- downloads:start -->
+
+## Download
+
+**[v0.1.0](https://github.com/stoatworks-labs/rosette/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`rosette-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/rosette/releases/download/v0.1.0/rosette-0.1.0-macos-universal.dmg) | 218 KB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`rosette-macos-universal.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-macos-universal.zip) | 181 KB |
+
+</details>
+
+<details>
+<summary><b>Windows</b> — x64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .exe installer | [`rosette-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/rosette/releases/download/v0.1.0/rosette-0.1.0-windows-x86_64-setup.exe) | 223 KB |
+| x64 · .zip archive | [`rosette-windows-x86_64.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-windows-x86_64.zip) | 116 KB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/rosette/releases](https://github.com/stoatworks-labs/rosette/releases).
+
+macOS builds are signed and notarised and open normally. The Windows builds are unsigned, so SmartScreen warns once.
+
+<!-- downloads:end -->
+
 ## A printed picture is four plates and a press
 
 That is the whole design, and everything else follows from it.
