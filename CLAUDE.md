@@ -82,8 +82,22 @@ separation.
 - macOS build must be universal. Verify with `lipo`, never the build log.
 - FFGL id is `RZ01`; the host-facing name is `SW Rosette`.
 
+## Windows
+- The x64 DLL is **cross-compiled in the Parallels guest** on this Mac (ARM64
+  Windows 11, MSVC 2022 Build Tools, `cmake -A x64`, vcpkg triplet
+  `x64-windows-static-md`) — the same route as the fleet's
+  `~/Projects/resolume/winbuild` scripts. There is no x64 Windows machine in
+  the build loop.
+- 2026-09-21: `Rosette.dll` is **380,928 B** and `dumpbin /EXPORTS` shows
+  `plugMain`. It was registered, loaded and instantiated in Resolume Arena
+  7.27.1 on win-lab (no GPU — Mesa llvmpipe), and `oxbow selftest` gave
+  **120 frames, gl error 0x0, PASS**. `AGENTS.md` has what that does and does
+  not prove, and the two Windows traps.
+
 ## Not done yet
-- Never loaded into Resolume. Never compiled on Windows. CI has never run.
+- Never run on a GPU in Resolume; never instantiated in Arena on macOS. No
+  frame timing on Windows — nothing there was timed. CI has never run.
+- The plugin's clock unit inside Arena is unconfirmed (`AGENTS.md`).
 - No OpenFX port, no browser demo, no user guide, no release tag, no remote.
 - `source/StoatworksAbout.h` and `ATTRIBUTIONS.md` are provisional hand copies.
 

@@ -158,6 +158,40 @@ because it reads as proof. The helper now carries
 `__attribute__((format(printf, 1, 0)))` so the compiler refuses the next one;
 count things with `%.0f`.
 
+**Under oxbow this plugin does not settle on a host clock unit, and that is a
+known limitation rather than a bug to fix blind.** The detector votes on the
+ratio of the host-time delta to the wall-time delta, and its guard requires a
+wall delta of **at least 0.5 ms** before a frame's ratio counts. An offline
+host renders a frame faster than that, so on 2026-09-21 under oxbow on x64
+Windows rosette logged `scale=0.000000` — no unit decided by frame 60 — and
+fell back to the wall clock, which is its documented fallback ("wrong in origin
+but right in rate"). Nothing rendered wrongly: the same run was 120 frames, gl
+error 0x0, PASS. Three siblings in the same run (galvo, cadence, readout)
+did settle on `scale=1.000000` (seconds) by frame 60 under the same host,
+because their guards are looser — the same problem is solved with four
+different guards across six repos, and rosette's is the strict one.
+
+In Arena, rosette **never reached the frame-60 log line at all** during that
+run, so **its clock unit inside Arena is unconfirmed**. Two of the siblings
+that did log there saw milliseconds. What depends on this clock is the **press
+wander**, which is a pure function of time: on the wall-clock fallback it still
+wanders at the right rate, but its origin is not the host's, so it will not
+line up with the host's timeline. Do not "fix" the guard on the strength of an
+offline host — see the open question at the foot of this file.
+
+**An ssh session on Windows has no desktop, so Arena cannot be started from
+one.** ssh lands on the service window station; Arena launched from there sits
+at about 31 MB doing nothing and cannot be screenshotted. It has to go through
+the session-1 scheduled-task wrapper — on win-lab that is `C:\arena-lab\s1.ps1`.
+
+**Arena's REST API will confirm a plugin is registered and then lie about
+adding it.** `/api/v1/effects` lists effects by **`idstring`** — the FFGL id,
+`RZ01` here, not the display name — which is how registration was confirmed.
+But the add-effect endpoint returns **200 without adding anything**, so
+instantiation has to be driven from Arena's own effects browser (a double-click
+applies to the current selection) and confirmed in the plugin's diag log. After
+the run, `/api/v1/composition/…/clips/1` still showed only `Transform`.
+
 **Inherited from the fleet, and all still true here:** `ScopedFBOBinding` does
 not restore the viewport (capture the host's and put it back before the print
 pass); every `ffglex::Scoped*` clears its binding to 0 on exit rather than
@@ -269,17 +303,54 @@ prove nothing.
 
   Two passes and no feedback, so it is cheap — about a fifth of tinsel at 4K.
 
+**Verified in a real host, once — 2026-09-21, win-lab** (an x64 Windows 11 Pro
+VM with **no GPU**: OpenGL is Mesa llvmpipe dropped in beside Arena; Resolume
+Arena 7.27.1, build 15990):
+
+- **The x64 DLL builds and exports the entry point.** It is **cross-compiled in
+  the Parallels guest** on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
+  `cmake -A x64`, vcpkg triplet `x64-windows-static-md`); there is no x64
+  Windows machine in the build loop. `Rosette.dll` is **380,928 bytes** and
+  `dumpbin /EXPORTS` shows **`plugMain`**.
+- **Arena registers it.** `/api/v1/effects` lists `SW Rosette` among 112 video
+  effects, under `idstring` **`RZ01`**, with the description the plugin
+  declares.
+- **Arena loads the DLL.** `plugin loaded build=<stamp>` in the plugin's own
+  diag log, carrying the stamp of the DLL built minutes earlier.
+- **Arena instantiates it and the shaders compile.** Applied from Arena's own
+  effects browser, the log reads `GL vendor=Mesa renderer=llvmpipe (LLVM
+  22.1.8, 256 bits) version=4.5 (Core Profile) Mesa 26.2.0` and then
+  `initialised`, and Arena drew its inspector, groups and all. The effect was
+  applied to the **composition**, not to a clip, so the proof of instantiation
+  is the diag log rather than the clip's effect list.
+- **It also instantiates and renders headlessly on x64 Windows.** `oxbow
+  selftest`: **120 frames, gl error 0x0, PASS**, with **921,600/921,600 lit
+  pixels (100%)**.
+- **The diag log is clean** of WARN, ERROR and FAIL.
+
+All of that ran on a **software rasteriser**. It says nothing about performance
+on Windows: no frame timing was taken there, and the ms/frame table above is
+macOS-only.
+
 **Assumed, or not yet done:**
 
-- **Never loaded into Resolume.** Everything above was compiled, rendered and
-  measured offline against the real plugin class in a headless CGL context.
-  How the parameters *present* — 49 of them in six groups, five colour triples
-  that should show as swatches — is untested, and so is whether Resolume's
-  `SetTime` unit detection settles the way the fleet's other plugins say it
-  does (the code is tinsel's, unchanged, but it has never seen a millisecond
-  host here).
-- **Windows has never been compiled**, let alone run. The CI workflows have
-  never executed: the repo has no remote.
+- **Never run on a GPU in Resolume, and never instantiated in Arena on macOS.**
+  The one host run was llvmpipe on Windows; everything measured above was
+  compiled, rendered and measured offline against the real plugin class in a
+  headless CGL context. Arena drew an inspector for the plugin, but nothing in
+  it was checked beyond its appearing, so how the parameters *present* — 49 of
+  them in six groups, five colour triples that should show as swatches — is
+  still untested.
+- **The clock unit inside Arena is unconfirmed.** The frame-60 line that would
+  name it was never logged during the run; see the trap above for why, and the
+  open question below for what it would take to settle.
+- **No real audio reached the plugin in Arena**, so the audio paths are still
+  only exercised by the harness's synthetic spectra, and Resolume's 64-bin
+  mapping is still assumed (below).
+- **No long session, no composition save or reload and no preset recall** were
+  exercised in the host, and nothing was tested against a Windows Resolume
+  licence beyond what the running copy provides.
+- The CI workflows have never executed: the repo has no remote.
 - **The 64 spectrum bins are assumed to be linear in frequency and
   low-first**, as the rest of the fleet assumes. Nothing here has seen
   Resolume's own FFT — only the harness's synthetic spectrum — so the audio
@@ -308,6 +379,14 @@ prove nothing.
 
 ## Open questions
 
+- **What should the clock-unit guard be?** rosette requires a wall delta of at
+  least 0.5 ms before a frame votes on the host's time unit, which an offline
+  host never gives it, so it falls back to the wall clock there; the six
+  plugins in that run use four different guards for the one problem.
+  Nothing renders wrongly either way, but the press wander's origin follows
+  whichever clock wins. The measurement that would settle it is rosette's own
+  frame-60 line out of Arena, which the 2026-09-21 run never produced — not a
+  change to the guard made on the strength of an offline host.
 - **Is the tone sampled at the right scale?** The print pass reads the cell's
   mean from mip level `log2(ScreenPx)`, which is a box of about a cell. A
   proper screen samples the *area* of the cell, and a box aligned to the

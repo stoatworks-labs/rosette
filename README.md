@@ -9,9 +9,10 @@
 > area against the dot-gain curve to **1%**, a screen angle recovered from the
 > dots' own centroids to **0.06°**, a registration offset to **0.05 px**, and
 > two solid inks overprinting **bit-exactly** as the ink colours predict (see
-> [Status](#status)). It has **never been loaded into Resolume** — only
-> compiled, rendered and measured offline. Check it in your own rig before
-> trusting it in a show.
+> [Status](#status)). It has since been **registered, loaded and instantiated
+> in Resolume Arena 7.27.1** on Windows, with its shaders compiling — but on a
+> software rasteriser, never on a GPU in Resolume, and never in Arena on macOS.
+> Check it in your own rig before trusting it in a show.
 
 Offset litho as an FFGL effect for [Resolume](https://resolume.com) Arena and
 Avenue.
@@ -145,14 +146,41 @@ measures rather than previews:
 
 Run `tools/verify.sh` before believing any of it.
 
-**Not yet done.** It has never been loaded into Resolume, so how the parameters
-*present* — whether 49 controls in six groups read sensibly in the inspector,
-whether the five colour triples show as swatches — is untested. The Windows
-build has never been compiled, let alone run: the CI workflows here have never
-executed, because the repo has no remote yet. There is no OpenFX port and no
-browser demo; neither is required for 0.1.0. `source/StoatworksAbout.h` and
-`ATTRIBUTIONS.md` are provisional hand copies, and there is no user guide, so
-the About block deliberately carries no guide link. No release tag.
+**In a real host, once.** On 2026-09-21 the x64 Windows DLL was cross-compiled
+in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
+`cmake -A x64`, vcpkg triplet `x64-windows-static-md` — there is no x64 Windows
+machine in the build loop) and taken to win-lab, an x64 Windows 11 Pro VM with
+**no GPU**, where OpenGL comes from Mesa llvmpipe dropped in beside Arena:
+
+| Check | Result |
+| --- | --- |
+| Windows binary | `Rosette.dll`, **380,928 bytes**, `dumpbin /EXPORTS` shows `plugMain` |
+| Arena registers it | Resolume Arena 7.27.1 (build 15990) lists `SW Rosette` among 112 video effects, under `idstring` **`RZ01`**, with the description the plugin declares |
+| Arena loads the DLL | `plugin loaded build=<stamp>` in the plugin's own diag log, carrying the stamp of the DLL built minutes earlier |
+| Arena instantiates it, and the shaders compile | applied from Arena's own effects browser; the log reads `GL vendor=Mesa renderer=llvmpipe (LLVM 22.1.8, 256 bits) version=4.5 (Core Profile) Mesa 26.2.0` and then `initialised`, and Arena drew its inspector, groups and all |
+| Headless on x64 Windows | `oxbow selftest`: **120 frames, gl error 0x0, PASS**, 921,600/921,600 lit pixels (100%) |
+| The log | clean of WARN, ERROR and FAIL |
+
+That was a software rasteriser throughout, so it says nothing about speed:
+**no frame timing was taken on Windows**, and the ms/frame figures above remain
+macOS-only. The effect was applied to the composition rather than to a clip, so
+the proof of instantiation is the diag log, not the clip's effect list.
+
+**Not yet done.** It has **never run on a GPU in Resolume** — the one host run
+was on llvmpipe — and it has **never been instantiated in Arena on macOS**.
+Arena drew an inspector for it, but nothing in that inspector was checked
+beyond its appearing, so how the parameters *present* — whether 49 controls in
+six groups read sensibly, whether the five colour triples show as swatches —
+is still untested. No real audio has reached the plugin in a host; the audio
+path is still only exercised by the harness's synthetic spectra, and
+Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
+no composition save or reload and no preset recall were exercised in the host,
+and whether the plugin settles on Resolume's clock unit is unconfirmed — see
+[AGENTS.md](AGENTS.md). The CI workflows here have never executed, because the
+repo has no remote yet. There is no OpenFX port and no browser demo; neither is
+required for 0.1.0. `source/StoatworksAbout.h` and `ATTRIBUTIONS.md` are
+provisional hand copies, and there is no user guide, so the About block
+deliberately carries no guide link. No release tag.
 
 [AGENTS.md](AGENTS.md) has the full list of what is assumed rather than
 measured, and the traps.
