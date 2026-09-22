@@ -81,6 +81,16 @@ Model those two things and the rest is a consequence rather than an effect:
 **Solo** a plate to see its lattice on its own, which is how the angles and the
 screen are actually set.
 
+[![Rosette — offset litho as an effect, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=SNlf6vpeQvM)
+
+*[Watch it](https://www.youtube.com/watch?v=SNlf6vpeQvM) — 52 seconds: the
+screen arriving, each plate soloed at its own angle, the four dot shapes, dot
+gain from none to a newspaper's thirty points, two screens swung together until
+they beat, and the Riso preset. Every frame is the real plugin's output: an FFGL
+plugin has no window, so the footage is rendered by this repository's own
+offline harness (`rztest --pipe`, driven by a cue sheet) rather than filmed off
+a screen, and the clips are Resolume's bundled demo media.*
+
 ## The controls
 
 **Separation** — Black Generation (how much of the neutral component moves off
@@ -211,8 +221,12 @@ Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
 no composition save or reload and no preset recall were exercised in the host,
 and whether the plugin settles on Resolume's clock unit is unconfirmed — see
 [AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
-workflow have both run and passed on GitHub. There is no OpenFX port and no
-browser demo; neither is required for 0.1.0. `ATTRIBUTIONS.md` is still a
+workflow have both run and passed on GitHub. There is no OpenFX port; it is not
+required for 0.1.0. The [browser demo](https://rosette-demo.stoatworks-labs.com)
+runs the plugin's own separation and print shaders ported to WebGL2, and
+`demo/tools/check_shaders.py` holds that GLSL character-for-character against
+`source/Shaders.cpp` — but the Controls, Screen and Press conversions beside it
+are a hand translation and nothing checks those. `ATTRIBUTIONS.md` is still a
 provisional hand copy, and there is no user guide, so the About block
 deliberately carries no guide link.
 
