@@ -453,7 +453,8 @@ macOS-only.
   "fifteen points".
 - **Dot Shape, Ink Spread and the presets are judged by eye.** Nothing
   measures whether Newspaper looks like newsprint.
-- **No OpenFX port and no browser demo.** Neither is required for 0.1.0.
+- **No OpenFX port.** Not required for 0.1.0. The browser demo came later; see
+  *The browser demo* above.
 - **No user guide**, which is why `StoatworksAbout.h` carries `guide = ""` —
   a link that is not written is left out rather than shown as a button that
   opens a 404. That header is **generated** now: the project is registered in
