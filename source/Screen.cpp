@@ -18,10 +18,6 @@ const char* DotShapeName( DotShape shape )
 	}
 }
 
-/// The Elliptical dot's vertical stretch. 1.4 is a dot noticeably wider than
-/// it is tall without the rows reading as lines at the midtone.
-static constexpr float kEllipse = 1.4f;//= mirrored
-
 float Spot( float x, float y, DotShape shape )
 {
 	const float ax = std::fabs( x );//= mirrored

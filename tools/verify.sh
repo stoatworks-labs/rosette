@@ -14,7 +14,8 @@
 #                 curve, a lattice's angle and pitch off its own dot
 #                 centroids, a registration offset off the same, the
 #                 overprint arithmetic, the round trip, the press wander and
-#                 the audio path
+#                 the audio path -- and the GPU against the OpenFX build's
+#                 CPU print pass (--cpu), which needs a GPU and says so
 #   presets       is every preset row the right width and kind
 #   demo          is the browser demo still running the plugin's own GLSL --
 #                 demo/plugin.js carries a second copy of every shader,
@@ -36,12 +37,16 @@
 #   codesign      the exact command the release job runs, against a copy
 #   oxbow         the name, id and type a HOST sees, which nothing else here
 #                 reaches
+#   openfx        the OpenFX bundle: its plist names the binary on disk, it is
+#                 universal, it exports OfxGetPlugin, it ad-hoc signs, and a
+#                 host (ofxprobe) loads it from THIS build, renders through it
+#                 and applies a preset through it
 #   bench         the render cost, for the record. Not pass/fail -- there is
 #                 no threshold worth asserting on somebody else's GPU -- but
 #                 a verify run leaves a timing on the record, which is what
 #                 turns "it feels slower" into a comparison.
 #
-# The last five are release-job work done locally on purpose. A check that
+# The last six are release-job work done locally on purpose. A check that
 # only runs in CI, after a tag, is a check that will catch you after the tag.
 #
 set -uo pipefail
@@ -172,8 +177,17 @@ fi
 RZTEST="$BUILD/rztest"
 
 step "suites"
-for t in names defaults presets wander spot gain angle register overprint identity audio; do
-	if "$RZTEST" --$t >/dev/null 2>&1; then pass "rztest --$t"; else fail "rztest --$t"; fi
+for t in names defaults presets wander spot gain angle register overprint identity audio cpu; do
+	"$RZTEST" --$t >/dev/null 2>&1
+	code=$?
+	if [ "$code" -eq 0 ]; then
+		pass "rztest --$t"
+	elif [ "$code" -eq 77 ]; then
+		# --cpu compares against a GPU and exits 77 on a software renderer.
+		printf '   skipped: rztest --%s (no GPU here -- it needs one)\n' "$t"
+	else
+		fail "rztest --$t"
+	fi
 done
 
 step "presets"
@@ -266,6 +280,91 @@ if [ "$(uname)" = "Darwin" ] && [ -d "$BUNDLE" ]; then
 		esac
 	else
 		printf '   skipped: oxbow not built at %s\n' "$OXBOW"
+	fi
+fi
+
+OFX_BUNDLE="$BUILD/Rosette.ofx.bundle"
+OFX_BIN="$OFX_BUNDLE/Contents/MacOS/Rosette.ofx"
+
+if [ "$(uname)" = "Darwin" ]; then
+	step "openfx"
+	if [ ! -d "$OFX_BUNDLE" ]; then
+		fail "no OpenFX bundle at $OFX_BUNDLE (built with -DBUILD_OFX=OFF?)"
+	else
+		# cmake/InfoOFX.plist.in is copied from repo to repo, and the copy it
+		# is usually made from once had the PREVIOUS plugin's name in
+		# CFBundleExecutable. Nothing fails until codesign, after the tag,
+		# with a message about a "subcomponent" that never mentions the plist.
+		exe=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$OFX_BUNDLE/Contents/Info.plist" 2>/dev/null)
+		if [ -n "$exe" ] && [ -f "$OFX_BUNDLE/Contents/MacOS/$exe" ]; then
+			pass "CFBundleExecutable ($exe) is on disk"
+		else
+			fail "CFBundleExecutable is '$exe' but no such binary exists -- codesign will fail after the tag"
+		fi
+		ident=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$OFX_BUNDLE/Contents/Info.plist" 2>/dev/null)
+		if [ "$ident" = "com.stoatworks.rosette.ofx" ]; then
+			pass "CFBundleIdentifier is $ident"
+		else
+			fail "CFBundleIdentifier is '$ident'"
+		fi
+
+		archs=$(lipo -archs "$OFX_BIN" 2>/dev/null)
+		case "$archs" in *arm64*) pass "arm64 present" ;; *) fail "no arm64 (got: $archs)" ;; esac
+		case "$archs" in *x86_64*) pass "x86_64 present" ;; *) fail "no x86_64 (got: $archs)" ;; esac
+
+		syms=$(nm -gU "$OFX_BIN" 2>/dev/null)
+		case "$syms" in
+			*_OfxGetPlugin*) pass "exports OfxGetPlugin" ;;
+			*) fail "no OfxGetPlugin -- no host will see a plugin" ;;
+		esac
+
+		tmp=$(mktemp -d)
+		cp -R "$OFX_BUNDLE" "$tmp/" 2>/dev/null
+		if codesign --force --sign - --timestamp=none "$tmp/Rosette.ofx.bundle" >/dev/null 2>&1; then
+			pass "ad-hoc signs (the command the release job runs)"
+		else
+			fail "ad-hoc signing the OpenFX bundle failed"
+		fi
+		rm -rf "$tmp"
+
+		# A host, from resolume-ofx-bridge. It also scans /Library/OFX/Plugins
+		# and takes the FIRST bundle carrying an identifier, so an installed
+		# copy would be measured instead of this build -- hence the manifest's
+		# bundlePath is checked before anything is believed.
+		OFXPROBE="${OFXPROBE:-../resolume-ofx-bridge/build/ofxprobe}"
+		[ -x "$OFXPROBE" ] || OFXPROBE="$HOME/Projects/resolume/resolume-ofx-bridge/build/ofxprobe"
+		if [ -x "$OFXPROBE" ]; then
+			# The manifest echoes the --dir it was given, so give it a full path.
+			here=$(cd "$BUILD" && pwd)
+			manifest=$("$OFXPROBE" --dir "$here" --manifest com.stoatworks.rosette 2>/dev/null)
+			case "$manifest" in
+				*"\"bundlePath\": \"$here/Rosette.ofx.bundle\""*) pass "a host finds com.stoatworks.rosette in this build" ;;
+				*) fail "the host's com.stoatworks.rosette is not this build's -- check /Library/OFX/Plugins" ;;
+			esac
+
+			out=$("$OFXPROBE" --dir "$BUILD" --render com.stoatworks.rosette --size 640x360 2>&1)
+			case "$out" in
+				*"rendered 640x360"*) ;;
+				*) fail "the OpenFX bundle does not render -- see: $OFXPROBE --dir $BUILD --render com.stoatworks.rosette" ;;
+			esac
+			changed=$(printf '%s\n' "$out" | sed -n 's/^ *\([0-9][0-9]*\) of [0-9]* bytes differ.*/\1/p')
+			if [ -n "$changed" ] && [ "$changed" -gt 0 ]; then
+				pass "renders, and prints ($changed bytes of the frame changed)"
+			else
+				fail "the OpenFX bundle renders its input unchanged"
+			fi
+
+			# Choosing a preset is a user edit; the plugin's changedParam must
+			# write the row into the controls. Riso 2-Colour turns the yellow
+			# and black plates off.
+			out=$("$OFXPROBE" --dir "$BUILD" --render com.stoatworks.rosette --size 64x36 --edit preset=3 2>&1)
+			case "$out" in
+				*"plugin set plateK = 0"*) pass "a preset writes its row into the controls" ;;
+				*) fail "choosing a preset changed nothing" ;;
+			esac
+		else
+			printf '   skipped: ofxprobe not built at %s\n' "$OFXPROBE"
+		fi
 	fi
 fi
 

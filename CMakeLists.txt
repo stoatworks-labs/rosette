@@ -41,6 +41,41 @@ endif()
 
 option(ROSETTE_BUILD_TOOLS "Build the offline render and measurement harness" ON)
 
+# The FFGL plugin, the FFGL SDK submodule and GLEW are one dependency group, and
+# the OpenFX plugin belongs to none of it. Turning this OFF builds the OpenFX
+# plugin alone, with no GL loader anywhere in the configure -- which is what the
+# Linux job does, because the FFGL SDK has no Linux path and GLEW would otherwise
+# have to be installed to build something that never calls it.
+option(ROSETTE_BUILD_FFGL "Build the FFGL plugin (needs the FFGL SDK and, off macOS, GLEW)" ON)
+
+# ---------------------------------------------------------------------------
+# The parts with no GL in them at all: the parameter conversions, the
+# separation and ink model, the spot functions and the threshold table, the
+# press wander, the preset table and the CPU print pass.
+#
+# A separate library from the FFGL core because the OpenFX plugin needs all of
+# it and has no GL context -- it renders on the CPU, and the Linux job has no GL
+# loader configured. Splitting it is what lets the OpenFX build link the SAME
+# arithmetic rather than a second transcription of it.
+# ---------------------------------------------------------------------------
+add_library(rosette_dsp OBJECT
+    source/Presets.h
+    source/Controls.h
+    source/Controls.cpp
+    source/Separation.h
+    source/Separation.cpp
+    source/Screen.h
+    source/Screen.cpp
+    source/Press.h
+    source/Press.cpp
+    source/Print.h
+    source/Print.cpp
+)
+target_include_directories(rosette_dsp PUBLIC source)
+set_target_properties(rosette_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+if(ROSETTE_BUILD_FFGL)
+
 # ---------------------------------------------------------------------------
 # The Resolume FFGL SDK, as a git submodule pinned to b1afaf9 -- the rev the
 # rest of the fleet pins.
@@ -54,8 +89,8 @@ set(FFGL_BUILD_EXAMPLE_PLUGINS OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/ffgl EXCLUDE_FROM_ALL)
 
 # ---------------------------------------------------------------------------
-# Everything the plugin is, as an OBJECT library so both the bundle and the
-# offline harness are built from exactly the same code.
+# Everything the FFGL plugin is beyond rosette_dsp, as an OBJECT library so
+# both the bundle and the offline harness are built from exactly the same code.
 #
 # OBJECT and not STATIC on purpose. `CFFGLPluginInfo` registers itself from a
 # file-scope constructor in Rosette.cpp and nothing ever references that object
@@ -67,17 +102,8 @@ add_library(rosette_core OBJECT
     source/StoatworksAbout.h
     source/StoatworksAboutLinks.h
     source/StoatworksAboutParams.h
-    source/Presets.h
     source/Diag.h
     source/Diag.cpp
-    source/Controls.h
-    source/Controls.cpp
-    source/Separation.h
-    source/Separation.cpp
-    source/Screen.h
-    source/Screen.cpp
-    source/Press.h
-    source/Press.cpp
     source/Audio.h
     source/Audio.cpp
     source/PassBuffer.h
@@ -89,7 +115,7 @@ add_library(rosette_core OBJECT
 )
 
 target_include_directories(rosette_core PUBLIC source)
-target_link_libraries(rosette_core PUBLIC ffgl::sdk)
+target_link_libraries(rosette_core PUBLIC ffgl::sdk rosette_dsp)
 target_compile_definitions(rosette_core PUBLIC ROSETTE_VERSION="${PROJECT_VERSION}")
 set_target_properties(rosette_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -104,10 +130,15 @@ endif()
 
 # ---------------------------------------------------------------------------
 # The plugin. FFGL resolves one plugMain per binary.
+#
+# rosette_dsp is named again on every final target because an OBJECT library's
+# objects do NOT travel transitively through a second OBJECT library:
+# rosette_core linking it hands this target the include path and nothing to
+# link, and the failure is a pile of undefined symbols at the last step.
 # ---------------------------------------------------------------------------
 function(rosette_add_plugin target entry bundle_name identifier)
     add_library(${target} MODULE ${entry})
-    target_link_libraries(${target} PRIVATE rosette_core)
+    target_link_libraries(${target} PRIVATE rosette_core rosette_dsp)
 
     if(APPLE)
         set_target_properties(${target} PROPERTIES
@@ -158,7 +189,7 @@ if(ROSETTE_BUILD_TOOLS AND APPLE)
     add_executable(rztest tools/rztest/main.cpp)
     # zlib ships with the OS, which is why the PNG writer is fifty lines
     # rather than a vendored dependency.
-    target_link_libraries(rztest PRIVATE rosette_core z
+    target_link_libraries(rztest PRIVATE rosette_core rosette_dsp z
         "-framework OpenGL"
         "-framework AppKit"
     )
@@ -174,4 +205,90 @@ if(ROSETTE_BUILD_TOOLS AND APPLE)
     add_test(NAME overprint COMMAND rztest --overprint)
     add_test(NAME identity  COMMAND rztest --identity)
     add_test(NAME audio     COMMAND rztest --audio)
+    add_test(NAME cpu       COMMAND rztest --cpu)
+    # --cpu compares against a GPU and has nothing to say about Apple's
+    # software renderer, which is all a CI runner has. It says so, and exits
+    # 77 so ctest reports it skipped rather than passed.
+    set_tests_properties(cpu PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+endif()  # ROSETTE_BUILD_FFGL
+
+# ---------------------------------------------------------------------------
+# The OpenFX build, for Resolve/Nuke/Natron/Vegas. CPU render against the
+# vendored OFX SDK subset under external/openfx (C headers + the official C++
+# Support library, BSD-3). rosette_dsp links straight in, so the separation,
+# the screen, the press and the preset table are the same code as the FFGL
+# build; only the per-pixel print pass is written twice (Print.cpp, against
+# Shaders.cpp), and `rztest --cpu` holds the two against each other.
+# ---------------------------------------------------------------------------
+option(BUILD_OFX "Build the OpenFX plugin" ON)
+
+if(BUILD_OFX)
+    set(OFX_SDK "${CMAKE_CURRENT_SOURCE_DIR}/external/openfx")
+
+    add_library(RosetteOFX MODULE
+        source/ofx/RosetteOFX.cpp
+        source/ofx/StoatworksAboutOFX.h
+        ${OFX_SDK}/Support/Library/ofxsCore.cpp
+        ${OFX_SDK}/Support/Library/ofxsImageEffect.cpp
+        ${OFX_SDK}/Support/Library/ofxsInteract.cpp
+        ${OFX_SDK}/Support/Library/ofxsLog.cpp
+        ${OFX_SDK}/Support/Library/ofxsMultiThread.cpp
+        ${OFX_SDK}/Support/Library/ofxsParams.cpp
+        ${OFX_SDK}/Support/Library/ofxsProperty.cpp
+        ${OFX_SDK}/Support/Library/ofxsPropertyValidation.cpp
+    )
+    # PRIVATE on an OBJECT library gives both the objects and the usage
+    # requirements. `$<TARGET_OBJECTS:rosette_dsp>` would give the objects
+    # alone -- no include directories -- and the failure is platform-specific
+    # enough to cost a day.
+    target_link_libraries(RosetteOFX PRIVATE rosette_dsp)
+    target_include_directories(RosetteOFX PRIVATE
+        source
+        "${OFX_SDK}/include"
+        "${OFX_SDK}/Support/include"
+    )
+    target_compile_definitions(RosetteOFX PRIVATE
+        ROSETTE_VERSION="${PROJECT_VERSION}"
+        PLUGIN_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        PLUGIN_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    )
+
+    # Threads, explicitly. The OFX Support library's multi-thread suite calls
+    # pthread_create, and on Rocky 8 -- glibc 2.28, the floor Resolve supports --
+    # that still lives in libpthread; libpthread was only folded into libc in
+    # glibc 2.34. Leave it out and the plugin compiles, links, passes a symbol
+    # check and a glibc-version check, and then fails at dlopen with "undefined
+    # symbol: pthread_create". macOS and Windows never show it.
+    find_package(Threads REQUIRED)
+    target_link_libraries(RosetteOFX PRIVATE Threads::Threads)
+
+    set(OFX_BUNDLE_DIR "${CMAKE_BINARY_DIR}/Rosette.ofx.bundle")
+    set_target_properties(RosetteOFX PROPERTIES
+        PREFIX ""
+        SUFFIX ".ofx"
+        OUTPUT_NAME "Rosette"
+        POSITION_INDEPENDENT_CODE ON
+        LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/MacOS"
+    )
+    if(APPLE)
+        set(OFX_BUNDLE_IDENTIFIER "com.stoatworks.rosette.ofx")
+        configure_file(cmake/InfoOFX.plist.in
+            "${OFX_BUNDLE_DIR}/Contents/Info.plist" @ONLY)
+    elseif(WIN32)
+        set_target_properties(RosetteOFX PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Win64"
+            RUNTIME_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Win64"
+            LIBRARY_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/Contents/Win64"
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/Contents/Win64"
+            # MSVC's .exp/.lib for this target; its default directory collides
+            # with the FFGL target's, which shares the output base name, and a
+            # parallel build then races on the file (LNK1104).
+            ARCHIVE_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/importlib"
+            ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${OFX_BUNDLE_DIR}/importlib")
+    else()
+        set_target_properties(RosetteOFX PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${OFX_BUNDLE_DIR}/Contents/Linux-x86-64")
+    endif()
 endif()

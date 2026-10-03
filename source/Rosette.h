@@ -3,6 +3,7 @@
 #include "Audio.h"
 #include "PassBuffer.h"
 #include "Presets.h"
+#include "Print.h"
 #include "StoatworksAboutParams.h"
 
 #include <FFGLSDK.h>
@@ -64,6 +65,14 @@ public:
 	/// Where each plate sat on the last rendered frame, in pixels, after
 	/// registration, wander and audio. For the harness.
 	void PlateOffsetsForTest( float out[ 4 ][ 2 ] ) const;
+
+	/// Everything the last rendered frame's shaders were told, audio
+	/// included. The harness hands it to the CPU print pass (Print.h) and
+	/// compares the two pictures: `rztest --cpu`.
+	const rosette::print::Settings& LastSettingsForTest() const
+	{
+		return lastSettings;
+	}
 
 	/// The analyser, for the harness to count onsets.
 	const rosette::audio::Analyser& AnalyserForTest() const
@@ -204,8 +213,9 @@ private:
 	float kickDirection[ 4 ][ 2 ] = {};
 	unsigned int kickSalt         = 0;
 
-	/// Where each plate was put on the last frame.
-	float plateOffset[ 4 ][ 2 ] = {};
+	/// What the last frame's shaders were told, including where each plate
+	/// was put.
+	rosette::print::Settings lastSettings;
 
 	float params[ PT_COUNT ] = {};
 

@@ -20,6 +20,7 @@
         rztest --overprint              two solids multiply as the ink colours predict
         rztest --identity               a flat colour comes back as its CMYK round trip
         rztest --audio                  silence leaves the press alone; a beat kicks it
+        rztest --cpu                    the GPU and the OpenFX build's CPU print agree
         rztest --bench                  ms/frame at 720p through 4K
         rztest --pipe                   raw frames in, raw frames out
 
@@ -38,6 +39,7 @@
 #include "Audio.h"
 #include "Controls.h"
 #include "Press.h"
+#include "Print.h"
 #include "Rosette.h"
 #include "Screen.h"
 #include "Separation.h"
@@ -51,6 +53,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -301,9 +304,28 @@ CGLContextObj createContext()
 		static_cast< CGLPixelFormatAttribute >( 0 )
 	};
 
+	//RZTEST_RENDERER=software asks for Apple's software renderer by id, which
+	//is how to see locally what a CI runner -- which has no accelerated
+	//context at all -- will measure. Leaving out kCGLPFAAccelerated alone is
+	//not enough: CGL is free to hand back the GPU anyway, and does.
+	const CGLPixelFormatAttribute generic[] = {
+		kCGLPFAOpenGLProfile, static_cast< CGLPixelFormatAttribute >( kCGLOGLPVersion_GL4_Core ),
+		kCGLPFARendererID, static_cast< CGLPixelFormatAttribute >( kCGLRendererGenericFloatID ),
+		kCGLPFAColorSize, static_cast< CGLPixelFormatAttribute >( 24 ),
+		kCGLPFAAlphaSize, static_cast< CGLPixelFormatAttribute >( 8 ),
+		static_cast< CGLPixelFormatAttribute >( 0 )
+	};
+	const char* renderer     = std::getenv( "RZTEST_RENDERER" );
+	const bool forceSoftware = renderer != nullptr && std::string( renderer ) == "software";
+
 	CGLPixelFormatObj format = nullptr;
 	GLint formatCount        = 0;
-	if( CGLChoosePixelFormat( accelerated, &format, &formatCount ) != kCGLNoError || format == nullptr )
+	if( forceSoftware )
+	{
+		if( CGLChoosePixelFormat( generic, &format, &formatCount ) != kCGLNoError || format == nullptr )
+			return nullptr;
+	}
+	else if( CGLChoosePixelFormat( accelerated, &format, &formatCount ) != kCGLNoError || format == nullptr )
 	{
 		if( CGLChoosePixelFormat( software, &format, &formatCount ) != kCGLNoError || format == nullptr )
 			return nullptr;
@@ -1529,6 +1551,240 @@ int runAudio()
 }
 
 //---------------------------------------------------------------------------
+// --cpu
+//
+// The GPU against the OpenFX build's CPU print pass (Print.cpp) -- which is to
+// say, Resolume against Resolve. Each case renders the card through the real
+// plugin, takes the settings its shaders were given, and runs the CPU pass on
+// the same bytes with the same settings.
+//
+// What it cannot see is a mistake in Configure() itself, because both sides
+// use it -- that is what --gain, --angle, --register and --identity are for,
+// since they measure the picture against arithmetic done a third way.
+//---------------------------------------------------------------------------
+struct Disagreement
+{
+	int worst            = 0;  ///< the largest channel difference, in 1/255
+	size_t differing     = 0;  ///< pixels where any channel differs at all
+	size_t beyondOne     = 0;  ///< pixels where a channel differs by more than 1/255
+	double mean          = 0.0;///< mean absolute channel difference, in 1/255
+	size_t pixels        = 0;
+};
+
+Disagreement compareImages( const Image& a, const Image& b )
+{
+	Disagreement d;
+	d.pixels   = a.size() / 4;
+	double sum = 0.0;
+	for( size_t i = 0; i < a.size(); i += 4 )
+	{
+		int worstHere = 0;
+		for( int c = 0; c < 4; ++c )
+		{
+			const int diff = std::abs( static_cast< int >( a[ i + c ] ) - static_cast< int >( b[ i + c ] ) );
+			worstHere      = std::max( worstHere, diff );
+			sum += diff;
+		}
+		d.worst = std::max( d.worst, worstHere );
+		if( worstHere > 0 )
+			++d.differing;
+		if( worstHere > 1 )
+			++d.beyondOne;
+	}
+	d.mean = sum / static_cast< double >( a.size() );
+	return d;
+}
+
+/// The CPU print pass over an RGBA8 picture, bottom row first, as RGBA8.
+/// Single-threaded: the OpenFX plugin splits the same calls across threads.
+Image printOnCpu( const print::Settings& settings, const Image& picture, int width, int height, const float* thresholds )
+{
+	print::Plates plates;
+	plates.Allocate( width, height );
+
+	const auto texel = [ & ]( size_t pixel, float rgba[ 4 ] ) {
+		for( int c = 0; c < 4; ++c )
+			rgba[ c ] = static_cast< float >( picture[ pixel * 4 + c ] ) / 255.0f;
+	};
+
+	const size_t count = static_cast< size_t >( width ) * height;
+	for( size_t i = 0; i < count; ++i )
+	{
+		float rgba[ 4 ];
+		texel( i, rgba );
+		print::SeparateTexel( rgba, settings, plates.levels[ 0 ].texels.data() + i * 4 );
+	}
+	print::BuildMipChain( plates );
+
+	Image out( picture.size() );
+	for( int y = 0; y < height; ++y )
+		for( int x = 0; x < width; ++x )
+		{
+			const size_t i = static_cast< size_t >( y ) * width + x;
+			float source[ 4 ], printed[ 4 ];
+			texel( i, source );
+			print::PrintPixel( settings, plates, thresholds, x, y, source, printed );
+			for( int c = 0; c < 4; ++c )
+				//In double: the product of a float and 255 is not always a
+				//float, and 0.9f * 255.0f rounds UP to exactly 229.5 in
+				//single precision. GL rounds the exact product.
+				out[ i * 4 + c ] = static_cast< unsigned char >( std::lround( static_cast< double >( std::clamp( printed[ c ], 0.0f, 1.0f ) ) * 255.0 ) );
+		}
+	return out;
+}
+
+/// The card with a soft alpha ramp across it, premultiplied the way a host
+/// hands a picture over.
+Image cardWithAlpha( int width, int height )
+{
+	Image image = buildCard( width, height );
+	for( int y = 0; y < height; ++y )
+		for( int x = 0; x < width; ++x )
+		{
+			const size_t at   = ( static_cast< size_t >( y ) * width + x ) * 4;
+			const float alpha = static_cast< float >( x ) / static_cast< float >( width - 1 );
+			for( int c = 0; c < 3; ++c )
+				image[ at + c ] = toByte( image[ at + c ] / 255.0f * alpha );
+			image[ at + 3 ] = toByte( alpha );
+		}
+	return image;
+}
+
+/// What ctest reads as "skipped" (SKIP_RETURN_CODE in CMakeLists.txt) rather
+/// than as a pass.
+constexpr int kSkipped = 77;
+
+int runCpu()
+{
+	std::printf( "the GPU and the OpenFX build's CPU print pass agree\n\n" );
+
+	//Print.cpp mirrors a GPU's sampler and mip filter, measured on an Apple
+	//M4. Apple's software renderer -- all a CI runner has -- filters
+	//differently enough that the two disagree by a mean of 7/255 on every
+	//case, so a comparison against it would measure the renderer and say
+	//nothing about the port. Skipped, loudly, rather than loosened until it
+	//passes there.
+	const GLubyte* rendererName = glGetString( GL_RENDERER );
+	const std::string renderer  = rendererName != nullptr ? reinterpret_cast< const char* >( rendererName ) : "unknown";
+	std::printf( "  renderer: %s\n\n", renderer.c_str() );
+	if( renderer.find( "Software" ) != std::string::npos )
+	{
+		std::printf( "  SKIPPED: not a GPU. The CPU print mirrors a GPU's filtering, so this\n"
+		             "  check means something only where there is one -- run tools/verify.sh\n"
+		             "  on a Mac with a GPU.\n" );
+		return kSkipped;
+	}
+
+	struct Case
+	{
+		const char* name;
+		std::vector< std::pair< const char*, float > > set;
+		int width     = 640;
+		int height    = 360;
+		int frames    = 1;
+		bool alpha    = false;
+		AudioFeed feed = AudioFeed::Silence;
+	};
+
+	std::vector< Case > cases = {
+		{ "defaults", {} },
+		{ "defaults, K a hair out", { { "Register K X", 0.5003f } } },
+		{ "Elliptical, fine screen", { { "Dot Shape", 1.0f }, { "Screen", 0.25f } } },
+		{ "Square, soft, heavy gain", { { "Dot Shape", 2.0f }, { "Ink Spread", 0.7f }, { "Dot Gain", 0.9f } } },
+		{ "Line, coarse screen", { { "Dot Shape", 3.0f }, { "Screen", 0.95f } } },
+		{ "misregistered, Solo M", { { "Register M X", 0.8f }, { "Register M Y", 0.3f }, { "Solo", 2.0f } } },
+		{ "light separation, dense ink", { { "Black Generation", 0.2f }, { "Total Ink", 0.0f }, { "Ink Density", 1.0f } } },
+		{ "half Mix, soft alpha", { { "Mix", 0.5f } }, 640, 360, 1, true },
+		{ "wander at 1.5 s", { { "Press Wander", 0.5f }, { "Wander Speed", 0.8f } }, 640, 360, 91 },
+		{ "audio shaking the press", { { "Audio Drive", 0.8f }, { "Press Wander", 0.3f } }, 640, 360, 45, false, AudioFeed::Pulses },
+		{ "defaults at 1920x1080", {}, 1920, 1080 },
+	};
+	for( int p = 1; p <= presets::kCount; ++p )
+	{
+		Case c;
+		c.name   = presets::kPresets[ p - 1 ].name;
+		c.set    = { { "Preset", static_cast< float >( p ) } };
+		c.frames = 31;//half a second in, so a preset that wanders has wandered
+		cases.push_back( c );
+	}
+
+	const std::vector< float > thresholds = BuildThresholdTable();
+
+	//The bounds. Both renderers do the same arithmetic in float, and the CPU
+	//also mirrors the GPU's half-float plates buffer, its mip filter and its
+	//sampler's fixed-point weights (Print.h). What is left is float rounding
+	//on two different processors -- the GPU's cos, sin, sqrt and divide are
+	//not the CPU's -- and that moves a dot edge by far less than a pixel,
+	//which on an 8-bit edge pixel is a step of one.
+	//
+	//Pixels further out than that are one thing: a cell boundary running
+	//exactly through pixel centres. A 45-degree plate in register puts one on
+	//the diagonal x = y, and there the last bit of the GPU's sin and cos
+	//decides which cell a pixel is in -- one ulp, and the pixel takes its
+	//neighbour's dot. "defaults, K a hair out" moves the black plate 0.012 px
+	//off that line and every such pixel goes.
+	//
+	//Measured on an M4 Max: mean at most 0.0033/255, at most 0.083% of pixels
+	//(Square, soft, heavy gain) more than one step out. The bounds are that
+	//with headroom; the control case below misses them by orders of
+	//magnitude.
+	constexpr double kMeanBound      = 0.01;  //1/255 steps, averaged over every channel
+	constexpr double kBeyondOneBound = 0.002; //fraction of pixels more than one step out
+
+	std::printf( "  %-30s %9s %11s %11s %9s\n", "case", "worst/255", "differing", ">1/255", "mean/255" );
+	for( const Case& c : cases )
+	{
+		Rig rig;
+		if( !rig.Init( c.width, c.height ) )
+			return 1;
+		const Image picture = c.alpha ? cardWithAlpha( c.width, c.height ) : buildCard( c.width, c.height );
+		rig.Upload( picture );
+		for( const auto& setting : c.set )
+			if( !rig.Set( setting.first, setting.second ) )
+				return 1;
+		if( !rig.RenderFrames( c.frames, 60.0, c.feed ) )
+			return 1;
+
+		const Image gpu = rig.Pixels();
+		const Image cpu = printOnCpu( rig.plugin.LastSettingsForTest(), picture, c.width, c.height, thresholds.data() );
+		const Disagreement d = compareImages( gpu, cpu );
+
+		const double beyond = static_cast< double >( d.beyondOne ) / static_cast< double >( d.pixels );
+		std::printf( "  %-30s %9d %11zu %11zu %9.4f\n", c.name, d.worst, d.differing, d.beyondOne, d.mean );
+		Check( d.mean <= kMeanBound && beyond <= kBeyondOneBound,
+		       std::string( c.name ) + fmt( ": mean %.4f/255, %.4f%% of pixels beyond one step", d.mean, beyond * 100.0 ) );
+	}
+
+	//And the comparison must be able to fail. The same card, the GPU at the
+	//default screen and the CPU at a screen 4% coarser: every dot is a
+	//slightly different size in a slightly different place.
+	{
+		Rig rig;
+		if( !rig.Init( 640, 360 ) )
+			return 1;
+		const Image picture = buildCard( 640, 360 );
+		rig.Upload( picture );
+		if( !rig.RenderFrames( 1, 60.0, AudioFeed::Silence ) )
+			return 1;
+		const Image gpu = rig.Pixels();
+
+		rig.Set( "Screen", 0.47f );
+		if( !rig.RenderFrames( 1, 60.0, AudioFeed::Silence ) )
+			return 1;
+		const Image cpu = printOnCpu( rig.plugin.LastSettingsForTest(), picture, 640, 360, thresholds.data() );
+
+		const Disagreement d = compareImages( gpu, cpu );
+		const double beyond  = static_cast< double >( d.beyondOne ) / static_cast< double >( d.pixels );
+		std::printf( "  %-30s %9d %11zu %11zu %9.4f\n", "CONTROL: Screen 0.46 vs 0.47", d.worst, d.differing, d.beyondOne, d.mean );
+		Check( d.mean > kMeanBound * 10.0 && beyond > kBeyondOneBound * 10.0,
+		       fmt( "a 0.01 change of Screen is caught: mean %.3f/255, %.1f%% of pixels beyond one step", d.mean, beyond * 100.0 ) );
+	}
+
+	std::printf( "\n  %s\n", failures == 0 ? "PASS" : "FAIL" );
+	return failures == 0 ? 0 : 1;
+}
+
+//---------------------------------------------------------------------------
 // --bench
 //---------------------------------------------------------------------------
 double benchAt( int width, int height, int frames, double fps )
@@ -1616,6 +1872,7 @@ void usage()
 		"  --overprint       two solids multiply as the ink colours predict\n"
 		"  --identity        a flat colour comes back as its CMYK round trip\n"
 		"  --audio           silence leaves the press alone; a beat kicks it\n"
+		"  --cpu             the GPU and the OpenFX build's CPU print pass agree\n"
 		"  --bench           time ProcessOpenGL at 720p through 4K\n"
 		"  --pipe            raw RGBA frames on stdin, raw RGBA frames on stdout\n"
 		"  --script PATH     parameter cues for --pipe: 'frame Name value'\n"
@@ -1762,7 +2019,8 @@ int main( int argc, char** argv )
 			wantPipe = true;
 		else if( argument == "--names" || argument == "--defaults" || argument == "--presets" || argument == "--wander"
 		         || argument == "--spot" || argument == "--gain" || argument == "--angle" || argument == "--register"
-		         || argument == "--overprint" || argument == "--identity" || argument == "--audio" )
+		         || argument == "--overprint" || argument == "--identity" || argument == "--audio"
+		         || argument == "--cpu" )
 			check = argument;
 		else
 		{
@@ -1823,6 +2081,8 @@ int main( int argc, char** argv )
 		result = runIdentity();
 	else if( check == "--audio" )
 		result = runAudio();
+	else if( check == "--cpu" )
+		result = runCpu();
 	else if( wantBench )
 		result = runBench( frames, fps );
 	else

@@ -385,27 +385,59 @@ FFResult Rosette::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	UpdateAudio();
 
 	//---------------------------------------------------------------------
-	// The press. Where each plate sits this frame: the operator's
-	// registration, plus the wander, plus whatever the audio is doing.
+	// The controls, as the shaders will be told them. Print.cpp's Configure
+	// is the one place that turns a control into a uniform; the OpenFX build
+	// calls it too, so the two cannot mean different things by a slider.
+	// Registration, Solo and Mix are performance controls no preset covers,
+	// so they are read straight from params[].
 	//---------------------------------------------------------------------
-	const float wander      = WanderFromParam( Effective( PT_WANDER ) );
-	const float wanderSpeed = WanderSpeedFromParam( Effective( PT_WANDER_SPEED ) );
-	const float drive       = AudioDriveFromParam( params[ PT_AUDIO_DRIVE ] );
-	const float shake       = drive * 0.35f * analyser.Level();
-	const float kick        = drive * analyser.Kick();
+	print::Controls controls;
+	controls.blackGeneration = Effective( PT_BLACK_GEN );
+	controls.totalInk        = Effective( PT_TOTAL_INK );
+	controls.screen          = Effective( PT_SCREEN );
+	controls.dotShape        = Effective( PT_DOT_SHAPE );
+	controls.dotGain         = Effective( PT_DOT_GAIN );
+	controls.inkSpread       = Effective( PT_INK_SPREAD );
+	for( int plate = 0; plate < kPlateCount; ++plate )
+	{
+		controls.angle[ plate ]             = Effective( PT_ANGLE_C + plate );
+		controls.registration[ plate ][ 0 ] = params[ PT_REG_C_X + plate * 2 ];
+		controls.registration[ plate ][ 1 ] = params[ PT_REG_C_Y + plate * 2 ];
+		controls.plate[ plate ]             = Effective( PT_PLATE_C + plate );
+		for( int ch = 0; ch < 3; ++ch )
+			controls.ink[ plate ][ ch ] = Effective( PT_INK_C_R + plate * 3 + ch );
+	}
+	controls.wander      = Effective( PT_WANDER );
+	controls.wanderSpeed = Effective( PT_WANDER_SPEED );
+	for( int ch = 0; ch < 3; ++ch )
+		controls.paper[ ch ] = Effective( PT_PAPER_R + ch );
+	controls.inkDensity = Effective( PT_INK_DENSITY );
+	controls.solo       = params[ PT_SOLO ];
+	controls.mix        = params[ PT_MIX ];
+
+	print::Settings settings = print::Configure( controls, now, pictureWidth, pictureHeight );
+
+	//---------------------------------------------------------------------
+	// The press. Configure has put each plate at the operator's registration
+	// plus the wander; the audio shakes and throws it from there. FFGL only:
+	// OpenFX has no audio.
+	//---------------------------------------------------------------------
+	const float drive = AudioDriveFromParam( params[ PT_AUDIO_DRIVE ] );
+	const float shake = drive * 0.35f * analyser.Level();
+	const float kick  = drive * analyser.Kick();
 
 	for( int plate = 0; plate < kPlateCount; ++plate )
 	{
-		const press::Offset w = press::Wander( plate, now, wander, wanderSpeed );
 		//The continuous shake wanders too, on a faster lane, so the level
 		//jitters the press rather than displacing it one way.
 		const press::Offset j = press::Wander( plate + 8, now, shake, 6.0f );
 
-		plateOffset[ plate ][ 0 ] = RegisterFromParam( params[ PT_REG_C_X + plate * 2 ] ) + w.x + j.x + kick * kickDirection[ plate ][ 0 ];
-		plateOffset[ plate ][ 1 ] = RegisterFromParam( params[ PT_REG_C_Y + plate * 2 ] ) + w.y + j.y + kick * kickDirection[ plate ][ 1 ];
+		settings.offset[ plate ][ 0 ] = settings.offset[ plate ][ 0 ] + j.x + kick * kickDirection[ plate ][ 0 ];
+		settings.offset[ plate ][ 1 ] = settings.offset[ plate ][ 1 ] + j.y + kick * kickDirection[ plate ][ 1 ];
 	}
 
-	lastNow = now;
+	lastSettings = settings;
+	lastNow      = now;
 
 	//---------------------------------------------------------------------
 	// Buffers. Every Ensure() happens before anything binds a texture:
@@ -436,8 +468,8 @@ FFResult Rosette::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		separateShader.Set( "InputTexture", 0 );
 		separateShader.Set( "MaxUV", maxCoords.s, maxCoords.t );
 		separateShader.Set( "HalfTexel", halfTexelX, halfTexelY );
-		separateShader.Set( "BlackGeneration", BlackGenerationFromParam( Effective( PT_BLACK_GEN ) ) );
-		separateShader.Set( "TotalInk", TotalInkFromParam( Effective( PT_TOTAL_INK ) ) );
+		separateShader.Set( "BlackGeneration", settings.blackGeneration );
+		separateShader.Set( "TotalInk", settings.totalInk );
 		quad.Draw();
 	}
 	platesBuffer.GenerateMipmaps();
@@ -466,39 +498,23 @@ FFResult Rosette::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 		printShader.Set( "HalfTexel", halfTexelX, halfTexelY );
 		printShader.Set( "ShapeCount", static_cast< float >( DotShape::Count ) );
 
-		const float screenPx = ScreenPxFromParam( Effective( PT_SCREEN ) );
-		printShader.Set( "ScreenPx", screenPx );
-		//The mip level whose texel is about one cell: the tone of a cell is
-		//the picture's mean over it, and the chain has already computed that.
-		printShader.Set( "PlateLod", std::clamp( std::log2( screenPx ), 0.0f, platesBuffer.MaxMipLevel() ) );
-		printShader.Set( "DotShape", static_cast< float >( optionIndex( Effective( PT_DOT_SHAPE ), static_cast< int >( DotShape::Count ) ) ) );
-		printShader.Set( "DotGain", DotGainFromParam( Effective( PT_DOT_GAIN ) ) );
-		printShader.Set( "InkSpread", InkSpreadFromParam( Effective( PT_INK_SPREAD ) ) );
+		printShader.Set( "ScreenPx", settings.screenPx );
+		printShader.Set( "PlateLod", settings.plateLod );
+		printShader.Set( "DotShape", static_cast< float >( settings.shape ) );
+		printShader.Set( "DotGain", settings.dotGain );
+		printShader.Set( "InkSpread", settings.inkSpread );
 
-		printShader.Set( "Angles",
-		                 AngleFromParam( Effective( PT_ANGLE_C ) ), AngleFromParam( Effective( PT_ANGLE_M ) ),
-		                 AngleFromParam( Effective( PT_ANGLE_Y ) ), AngleFromParam( Effective( PT_ANGLE_K ) ) );
+		printShader.Set( "Angles", settings.angle[ 0 ], settings.angle[ 1 ], settings.angle[ 2 ], settings.angle[ 3 ] );
 
 		//FFGLShader::Set has no array overload, so the arrays go up raw.
-		glUniform2fv( printShader.FindUniform( "Offsets" ), kPlateCount, &plateOffset[ 0 ][ 0 ] );
+		glUniform2fv( printShader.FindUniform( "Offsets" ), kPlateCount, &settings.offset[ 0 ][ 0 ] );
 
-		//Solo wins over the plate switches: it is "show me this lattice",
-		//and it would be no use if the plate happened to be off.
-		const int solo = optionIndex( params[ PT_SOLO ], kSoloCount );
-		float on[ kPlateCount ];
-		for( int plate = 0; plate < kPlateCount; ++plate )
-			on[ plate ] = solo > 0 ? ( solo - 1 == plate ? 1.0f : 0.0f )
-			                       : ( Effective( PT_PLATE_C + plate ) > 0.5f ? 1.0f : 0.0f );
-		printShader.Set( "PlateOn", on[ 0 ], on[ 1 ], on[ 2 ], on[ 3 ] );
+		printShader.Set( "PlateOn", settings.plateOn[ 0 ], settings.plateOn[ 1 ], settings.plateOn[ 2 ], settings.plateOn[ 3 ] );
 
-		float inks[ kPlateCount ][ 3 ];
-		for( int plate = 0; plate < kPlateCount; ++plate )
-			for( int ch = 0; ch < 3; ++ch )
-				inks[ plate ][ ch ] = Effective( PT_INK_C_R + plate * 3 + ch );
-		glUniform3fv( printShader.FindUniform( "InkColour" ), kPlateCount, &inks[ 0 ][ 0 ] );
-		printShader.Set( "Paper", Effective( PT_PAPER_R ), Effective( PT_PAPER_G ), Effective( PT_PAPER_B ) );
-		printShader.Set( "InkDensity", InkDensityFromParam( Effective( PT_INK_DENSITY ) ) );
-		printShader.Set( "MixAmount", params[ PT_MIX ] );
+		glUniform3fv( printShader.FindUniform( "InkColour" ), kPlateCount, &settings.ink[ 0 ][ 0 ] );
+		printShader.Set( "Paper", settings.paper[ 0 ], settings.paper[ 1 ], settings.paper[ 2 ] );
+		printShader.Set( "InkDensity", settings.inkDensity );
+		printShader.Set( "MixAmount", settings.mix );
 
 		quad.Draw();
 	}
@@ -630,8 +646,8 @@ void Rosette::PlateOffsetsForTest( float out[ 4 ][ 2 ] ) const
 {
 	for( int plate = 0; plate < kPlateCount; ++plate )
 	{
-		out[ plate ][ 0 ] = plateOffset[ plate ][ 0 ];
-		out[ plate ][ 1 ] = plateOffset[ plate ][ 1 ];
+		out[ plate ][ 0 ] = lastSettings.offset[ plate ][ 0 ];
+		out[ plate ][ 1 ] = lastSettings.offset[ plate ][ 1 ];
 	}
 }
 

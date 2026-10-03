@@ -24,6 +24,13 @@ void main()
 //---------------------------------------------------------------------------
 // Pass 1: separate. Mirrored from Separation.cpp; every mirrored line is
 // marked on both sides.
+//
+// The un-premultiply and the alpha weighting around the separation are ALSO
+// mirrored, in Print.cpp's SeparateTexel, for the OpenFX build's CPU render.
+// Those GLSL lines carry no marker of their own: demo/plugin.js must match
+// this text character for character (demo/tools/check_shaders.py), so even a
+// comment added inside a shader ships to the browser demo. Print.cpp marks
+// its side. Edit both, then run `rztest --cpu`.
 //---------------------------------------------------------------------------
 const char* const kSeparateShader = R"(#version 410 core
 
@@ -80,6 +87,11 @@ void main()
 // The spot functions. A fragment: no #version, no main, no uniforms, and no
 // dependency on anything outside itself. Shared verbatim between the print
 // pass and the harness's probe. Mirrored from Screen.cpp.
+//
+// spotSlope's comment below says it is not mirrored, and from the point of
+// view of `rztest --spot` it is not -- only the softness of an edge depends
+// on it. It does have a second copy, though: Print.cpp's SpotSlope, in the
+// OpenFX build's CPU print, which `rztest --cpu` holds against this one.
 //---------------------------------------------------------------------------
 const char* const kSpotLibrary = R"(
 const float kEllipse = 1.4;//= mirrored
@@ -128,6 +140,13 @@ float spotSlope( vec2 p, int shape )
 //---------------------------------------------------------------------------
 // Pass 2: print. Assembled from three pieces by PrintShaderSource(), because
 // the middle one is shared with the harness. See Shaders.h.
+//
+// coverage() and main() are mirrored line for line in Print.cpp (Coverage,
+// PrintPixel), which is the OpenFX build's whole render. Only the lines that
+// already mirror Separation.cpp are marked here; Print.cpp marks every line
+// it copies, because a marker added inside this GLSL would have to be added
+// to demo/plugin.js too and would ship to the browser demo. When you change
+// the print pass, change Print.cpp and run `rztest --cpu`.
 //---------------------------------------------------------------------------
 static const char* const kPrintPreamble = R"(#version 410 core
 

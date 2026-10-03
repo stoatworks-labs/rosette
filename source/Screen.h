@@ -61,6 +61,11 @@ enum class DotShape
 
 const char* DotShapeName( DotShape shape );
 
+/// The Elliptical dot's vertical stretch. 1.4 is a dot noticeably wider than
+/// it is tall without the rows reading as lines at the midtone. In the header
+/// because the CPU print pass's `SpotSlope` needs it as well as `Spot`.
+constexpr float kEllipse = 1.4f;//= mirrored
+
 /// The spot function, mirrored in GLSL. `x`, `y` in -1..1; returns 0..1.
 float Spot( float x, float y, DotShape shape );
 
