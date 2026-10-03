@@ -12,10 +12,15 @@
 > [Status](#status)). It has since been **registered, loaded and instantiated
 > in Resolume Arena 7.27.1** on Windows, with its shaders compiling — but on a
 > software rasteriser, never on a GPU in Resolume, and never in Arena on macOS.
-> Check it in your own rig before trusting it in a show.
+> The [OpenFX build](#openfx--resolve-vegas-nuke-natron) prints on the CPU and
+> is held against the GPU pixel for pixel — the same card through both comes
+> out identical in **over 99% of pixels**, a mean of **0.002/255** apart — but
+> it has only been run in a test host, never in Resolve or any real OpenFX
+> application. Check it in your own rig before trusting it in a show.
 
 Offset litho as an FFGL effect for [Resolume](https://resolume.com) Arena and
-Avenue.
+Avenue, and an [OpenFX](https://openeffects.org) effect for DaVinci Resolve,
+Vegas, Nuke and Natron.
 
 ![The test card printed: four screens interfering into rosettes, a halftone ramp, and the process primaries](docs/hero.jpg)
 
@@ -133,6 +138,73 @@ nothing routed this is an ordinary manual halftone and behaves like one.
 It is a modulation source at video rate, not a signal source: the smallest
 interval it can resolve is a frame, so a kick lands up to 17 ms late at 60 fps.
 
+## OpenFX — Resolve, Vegas, Nuke, Natron
+
+The same effect also builds as an OpenFX plugin, **Rosette** in the
+**Stoatworks** group, so it runs in DaVinci Resolve (Edit and Color pages, and
+Fusion), Vegas Pro, Nuke and Natron. It renders on the CPU, and it is the same
+press: the separation, the spot functions and their threshold table, the dot
+gain, the ink model, the wander and the six presets are the very C++ the
+Resolume build uses, and the per-pixel print pass is a line-for-line mirror of
+the GLSL that is checked against the GPU (below).
+
+Copy `Rosette.ofx.bundle` from the `rosette-ofx-*` zip for your platform into
+the standard OpenFX folder, then restart the host:
+
+```
+macOS    /Library/OFX/Plugins/
+Windows  C:\Program Files\Common Files\OFX\Plugins\
+Linux    /usr/OFX/Plugins/
+```
+
+The Linux build is built against glibc 2.28 so that it loads on Rocky 8, the
+Linux Resolve supports; anything newer loads it too. The OpenFX build is new
+since v0.1.0, so that release has no OpenFX download — the next one will.
+
+**What is different from the Resolume build, and why:**
+
+- **No audio.** OpenFX has no audio to give a plugin, and a timeline renders
+  frames in any order, so there is nothing for an envelope or an onset detector
+  to follow. Audio Drive and the audio input are not there at all rather than
+  there and dead; the plugin's own description says so. No preset touches
+  them, so every preset means the same press in both builds.
+- **Presets set the controls.** Resolume will not take values pushed back from
+  a plugin, so there a preset is laid over the sliders while it is selected. An
+  OpenFX host will, so here choosing a preset writes its values into the
+  controls, as one undo step, and moving any control it covers away from the
+  preset's value puts the menu back to Custom. Registration, Solo and Mix are
+  left alone by every preset in both builds.
+- **The press runs on the timeline.** The wander is a pure function of time —
+  bounded noise, not an accumulating walk — so it needs no history: any frame
+  renders on its own, in any order, and scrubbing shows the press at that
+  moment. Time is the frame number over the clip's frame rate.
+- **The ink colours and the paper are colour pickers** rather than three
+  sliders each. Same values, same defaults.
+- **A proxy render should look like the full one.** At a reduced render scale
+  the screen and the press offsets scale with it, and on an anamorphic clip the
+  pixel aspect is taken into account so the dots stay round. Resolume has
+  neither render scale nor non-square pixels, and the test host renders at full
+  scale with square pixels, so both of these are written but not yet seen
+  working.
+
+**How close the two builds are.** `rztest --cpu` renders the test card through
+the GPU and through the CPU print pass with the same settings, and the same
+card through the real OpenFX plugin in a test host gives the same numbers: at
+the defaults, every preset and eight more settings, at most **0.77%** of pixels
+differ at all, a mean of at most **0.0021/255**, and more than 99.98% of pixels
+are within one 8-bit step. The rest are a handful of pixels per frame that sit
+within a rounding error of a cell boundary — a 45° plate in register puts one
+along the diagonal — where the last bit of the arithmetic decides which cell,
+and so which cell's dot, they belong to. Getting this close meant mirroring the
+GPU's own arithmetic, not just the shader's: the half-float plates buffer, how
+the driver builds the mip chain, the sampler's fixed-point weights and which
+multiplies its compiler fuses, all measured on the machine (`source/Print.h`
+has the details). Other graphics cards are free to round differently, so the
+Resolume build itself may differ by a similar amount from one GPU to the next;
+nobody has measured that.
+
+It costs **37 ms a frame at 1920×1080** on eight threads of an M4 Max.
+
 ## Build
 
 Needs CMake and the Resolume FFGL SDK, which is a submodule.
@@ -145,8 +217,11 @@ cmake --build build
 cmake --install build    # → ~/Documents/Resolume Arena/Extra Effects
 ```
 
-macOS builds universal (arm64 + x86_64) by default. Add
-`-DCMAKE_OSX_ARCHITECTURES=arm64` for a faster development build.
+That builds both plugins: `Rosette.bundle` (FFGL) and `Rosette.ofx.bundle`
+(OpenFX). macOS builds universal (arm64 + x86_64) by default. Add
+`-DCMAKE_OSX_ARCHITECTURES=arm64` for a faster development build. The OpenFX
+plugin needs nothing but a compiler: `-DROSETTE_BUILD_FFGL=OFF` builds it alone,
+with no FFGL SDK and no GL loader, which is how Linux builds it.
 
 ## Building and testing
 
@@ -162,6 +237,7 @@ measures rather than previews:
     ./build/rztest --overprint              two solids multiply as predicted
     ./build/rztest --identity               the CMYK round trip
     ./build/rztest --audio                  silence, and a beat
+    ./build/rztest --cpu                    the GPU against the OpenFX build's CPU print
     ./build/rztest --bench                  720p through 4K
     python3 tools/sweep.py                  no control is silently dead
     tools/verify.sh                         all of it, on a fresh universal build
@@ -187,6 +263,22 @@ measures rather than previews:
 | Render cost | 0.15 ms/frame at 720p, 0.23 at 1080p, 0.50 at 4K — 3% of a 60 fps frame |
 
 Run `tools/verify.sh` before believing any of it.
+
+**The OpenFX build**, measured on the same machine, 2026-10-03, by
+`rztest --cpu` and through the real plugin in `ofxprobe`, a CPU OpenFX test
+host:
+
+| Check | Result |
+| --- | --- |
+| GPU against the CPU print, on the test card | 16 cases — the defaults at 640×360 and 1920×1080, all six presets half a second in, seven settings across every control group, and a soft alpha ramp at half Mix: at most **0.77%** of pixels differ, at most **0.0135%** by more than one step, mean at most **0.0021/255**; the largest single difference is one pixel on a cell boundary of a wandering plate |
+| …and the comparison can fail | the GPU at Screen 0.46 against the CPU at 0.48: **70%** of pixels differ, mean **41.7/255** |
+| The real plugin in a host | the same card through `Rosette.ofx.bundle` gives the same numbers as the in-process check, so the pixel marshalling adds nothing |
+| Render order | frame 37 rendered alone, after frames 0–36, and after 60, 5 and 0 — byte-identical every time; 38 frames of a wandering press are 38 different pictures |
+| Mix 0 | the host is told the effect is an identity; rendered anyway, **0** pixels differ from the input |
+| Float pipeline | 32-bit float in and out gives the 8-bit result, but for one pixel one step out of 230,400 |
+| Presets | choosing one writes its row into the controls; moving a covered control off the preset's value drops to Custom; moving Registration does not |
+| Bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` on disk, ad-hoc signs |
+| Render cost | **37 ms/frame** at 1920×1080 on 8 threads (the first frame in a process 54 ms: it builds the threshold table) |
 
 **In a real host, once.** On 2026-09-21 an x64 Windows DLL was cross-compiled
 in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
@@ -221,8 +313,14 @@ Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
 no composition save or reload and no preset recall were exercised in the host,
 and whether the plugin settles on Resolume's clock unit is unconfirmed — see
 [AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
-workflow have both run and passed on GitHub. There is no OpenFX port; it is not
-required for 0.1.0. The [browser demo](https://rosette-demo.stoatworks-labs.com)
+workflow have both run and passed on GitHub. **The OpenFX build has never been
+loaded into Resolve, Vegas, Nuke or Natron** — only into `ofxprobe`, which
+renders at full scale, 8-bit or float, premultiplied — so a real host's proxy
+render scale, its premultiplication and its parameter panel are unconfirmed;
+its Windows and Linux builds have been compiled by CI and the Linux one loaded
+on Rocky 8, and neither has rendered a frame. The `--cpu` agreement is
+measured against an Apple M4's GPU; how far another card's FFGL render sits
+from either is unmeasured. The [browser demo](https://rosette-demo.stoatworks-labs.com)
 runs the plugin's own separation and print shaders ported to WebGL2, and
 `demo/tools/check_shaders.py` holds that GLSL character-for-character against
 `source/Shaders.cpp` — but the Controls, Screen and Press conversions beside it

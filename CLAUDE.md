@@ -1,8 +1,10 @@
 # rosette
 
 Offset litho — four halftone plates, their screen angles and the press that
-misregisters them — as an FFGL **effect** for Resolume Arena/Avenue. C++/GLSL,
-CMake MODULE → universal `.bundle` (macOS) + Windows `.dll`. MIT.
+misregisters them — as an FFGL **effect** for Resolume Arena/Avenue, and the
+same effect as an **OpenFX** filter for Resolve/Vegas/Nuke/Natron, rendered on
+the CPU. C++/GLSL, CMake MODULE → universal `.bundle` (macOS) + Windows `.dll`,
+and `Rosette.ofx.bundle` for macOS, Windows and Linux. MIT.
 
 Read `AGENTS.md` before changing the spot functions, the threshold table or the
 separation.
@@ -11,8 +13,11 @@ separation.
 - Configure: `cmake -B build -DCMAKE_BUILD_TYPE=Release`
 - Fast dev build: add `-DCMAKE_OSX_ARCHITECTURES=arm64`
 - Universal (what ships): `cmake -B build-universal -DCMAKE_BUILD_TYPE=Release`
-- Build: `cmake --build build`
+- Build: `cmake --build build` (both plugins: `Rosette.bundle`, `Rosette.ofx.bundle`)
+- OpenFX alone, no FFGL SDK or GL: add `-DROSETTE_BUILD_FFGL=OFF` (what Linux does)
 - Install into Arena: `cmake --install build`
+- Run the OpenFX plugin in a host: `../resolume-ofx-bridge/build/ofxprobe --dir build --render com.stoatworks.rosette --size 640x360 --out /tmp/o.bmp`
+  (it also scans `/Library/OFX/Plugins` and takes the FIRST match — `--manifest` shows which bundle)
 - Render a frame offline: `./build/rztest --out /tmp/f.png --size 1920x1080`
 - Set anything by name: `--set "Screen=0.6" --set "Solo=4" --set "Dot Gain=0.5"`
 - List parameters: `./build/rztest --list`
@@ -29,6 +34,8 @@ separation.
 - The ink model at solids: `./build/rztest --overprint`
 - The CMYK round trip: `./build/rztest --identity`
 - The press wander: `./build/rztest --wander`
+- The GPU against the OpenFX build's CPU print: `./build/rztest --cpu` (needs a
+  GPU; `RZTEST_RENDERER=software` shows what CI sees, which is a skip)
 - The audio path: `./build/rztest --audio`
 - Preset 1 IS the constructor's defaults: `./build/rztest --defaults`
 - Presets survive every host behaviour: `./build/rztest --presets`
@@ -56,6 +63,23 @@ separation.
 - The spot functions exist **twice** — `Screen.cpp` and `kSpotLibrary` in
   `Shaders.cpp` — and every mirrored line is marked `//= mirrored` on both
   sides. Change one, change both, run `--spot`.
+- **The print pass exists twice too**: `kPrintMain`/`kSeparateShader` in
+  `Shaders.cpp` and `Print.cpp`, the OpenFX build's CPU render. `Print.cpp`
+  marks every line it copies; the GLSL is not marked, because demo/plugin.js
+  must match it character for character. Change one, change both, run `--cpu`.
+- `Print.cpp` also mirrors **the GPU's own sampling**, measured on the M4:
+  the RGBA16F target rounds toward zero, the mip chain has two paths, sampler
+  weights are 1/256 and the trilinear blend is in 64ths of a half-float LOD.
+  `Print.h` has the details; AGENTS.md has why each one mattered.
+- `Print.cpp` is compiled with `-ffp-contract=off`, except the rotation into a
+  plate's frame, which is an explicit `std::fma` because that is how the M4's
+  shader compiler builds it. Contraction there decides which cell a pixel on
+  a cell boundary lands in.
+- `print::Configure` turns controls into uniforms for BOTH builds. The FFGL
+  plugin adds its audio offsets on top; the OpenFX one has no audio.
+- `rosette_dsp` (no GL) and `rosette_core` (FFGL) are separate OBJECT
+  libraries, and an OBJECT library's objects do not travel through another:
+  every final target names `rosette_dsp` itself.
 - The GLSL spot functions are a **fragment** (no `#version`, no `main`).
   `PrintShaderSource()` and `SpotProbeShaderSource()` assemble the print pass
   and the test probe around the *same* string, so the test runs what the plugin
@@ -85,6 +109,12 @@ separation.
   events. `Effective()` is the one place that reads them.
 - macOS build must be universal. Verify with `lipo`, never the build log.
 - FFGL id is `RZ01`; the host-facing name is `SW Rosette`.
+- OpenFX identifier is `com.stoatworks.rosette`, label `Rosette`, group
+  `Stoatworks`, bundle id `com.stoatworks.rosette.ofx`. Permanent, as are the
+  parameter script names (AGENTS.md lists them).
+- OFX factories and the threshold table are heap-allocated and never freed:
+  an exit-time destructor in a plugin module runs through a dangling pointer
+  when a host unloads it early.
 
 ## Windows
 - The x64 DLL is **cross-compiled in the Parallels guest** on this Mac (ARM64
@@ -102,7 +132,9 @@ separation.
 - Never run on a GPU in Resolume; never instantiated in Arena on macOS. No
   frame timing on Windows — nothing there was timed.
 - The plugin's clock unit inside Arena is unconfirmed (`AGENTS.md`).
-- No OpenFX port, no user guide, no video.
+- No user guide.
+- The OpenFX build has only ever run in `ofxprobe` — never in Resolve, Vegas,
+  Nuke or Natron — and is not in the v0.1.0 release.
 - `ATTRIBUTIONS.md` is still a provisional hand copy — `sync-attributions.py`
   does not know this repo. `source/StoatworksAbout.h` is generated by
   `sync-about.py` now; do not hand-edit it.

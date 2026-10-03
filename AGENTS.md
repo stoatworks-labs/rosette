@@ -3,8 +3,11 @@
 **What it is:** an FFGL 2.1 **effect** (`RZ01`, shown as `SW Rosette`) for
 Resolume Arena/Avenue that prints the clip: four halftone plates at their own
 screen angles, laid down by a press that never quite registers them. C++17 +
-GLSL 4.10, CMake, universal macOS `.bundle` and a Windows `.dll`. MIT,
-intended home `github.com/stoatworks-labs/rosette`.
+GLSL 4.10, CMake, universal macOS `.bundle` and a Windows `.dll`. The same
+effect is also an **OpenFX filter** (`com.stoatworks.rosette`, shown as
+`Rosette` in the `Stoatworks` group) for Resolve, Vegas, Nuke and Natron,
+rendering on the CPU: universal macOS, Windows x64 and Linux x86-64
+`.ofx.bundle`s. MIT, at `github.com/stoatworks-labs/rosette`.
 
 `CLAUDE.md` is the command reference. This file is the *why*: read it before
 touching the spot functions, the threshold table or the separation.
@@ -144,8 +147,65 @@ with the metric stretched vertically, which is why one branch serves both.
 wrong tool.** The cell coordinate comes from a `floor`, so it jumps at every
 cell boundary, and `fwidth` there reports an enormous derivative and paints an
 edge that does not exist — a grid of soft lines over the whole picture.
-`spotSlope` returns an analytic bound instead, and is deliberately *not*
-mirrored: only the softness of a dot's edge depends on it, never its area.
+`spotSlope` returns an analytic bound instead, and `--spot` deliberately does
+not check it: only the softness of a dot's edge depends on it, never its area.
+It does have a second copy now — `SpotSlope` in `Print.cpp`, the OpenFX
+build's — and `--cpu` is what holds that one.
+
+**The GPU's sampler is part of the picture, and the OpenFX port had to measure
+it.** The first CPU print pass mirrored the shader exactly and still differed
+from the GPU in 5% of pixels, up to 6/255 in whole regions of the Riso preset.
+Nothing in the GLSL was wrong; the difference was everything the GLSL does not
+say. The tone of a cell is one `textureLod` from a mip chain, and what that
+fetch returns is the driver's business: the RGBA16F plates round each texel,
+`glGenerateMipmap` chooses its own filter, and the sampler holds weights and
+LOD in fixed point. A tone off by one half-float step moves a dot by nothing
+much — except near a solid, where `smoothstep( 0.98, 1.0, a )` multiplies it by
+75. So each was measured on the M4 with a scratch probe that read back every
+mip level and thousands of samples, and mirrored in `Print.cpp`. The findings
+are in `Print.h`, and none of them is what the GL spec would lead you to
+write: the render target rounds TOWARD ZERO; level 1 and every level made from
+an odd side are bilinear samples at the new texel's centre rounded ties-away
+(not a box that drops the odd row), while the other levels are a box rounded
+nearest-even in two steps; bilinear weights are 1/256; and the trilinear blend
+holds the LOD as a half float and blends in 64ths of its fraction — so 3.593
+blends at 38/64, which the obvious 1/1024 fixed-point model got wrong by one
+step and which was the whole of the Riso disagreement. Each finding was kept
+only when it moved the comparison, and the differing pixels went from ~11,500
+to ~700 of 230,400.
+
+**`0.9f * 255.0f` is exactly 229.5 in single precision.** The product of a float
+and 255 is not always a float: 0.8999999762 × 255 = 229.49999 rounds UP to
+229.5 when stored, and then rounds to 230, where GL — rounding the exact
+product — writes 229. The Silkscreen preset's paper is 0.90 blue, so a third of
+its frame came out one step brighter on the CPU. The OpenFX build and the
+harness quantise in double.
+
+**A cell boundary through pixel centres is decided by which multiply is
+fused.** A 45° plate in register puts a cell boundary exactly on the pixel
+centres along x = y, where the plate's `q.y` is 0 to the last bit — and
+whichever way that last bit goes, `floor` puts the pixel in that cell, with
+that cell's tone. Clang on arm64 fuses `a*b + c*d` one way by default, the M4's
+shader compiler evidently fuses it the other (`fma( c, d, a*b )`), and the
+pixels on that diagonal came out up to 211/255 apart. Note that a small test
+shader with the same expression did NOT fuse it — the compiler decides per
+shader — so the CPU form was chosen by measurement: `Print.cpp` writes the
+rotation as that explicit `std::fma` (exact on every platform, so arm64 and
+x86_64 agree) and is otherwise built with `-ffp-contract=off`. That took the
+diagonal to at most 18/255 and 8 pixels a frame; what is left is the GPU's
+interpolated pixel position, which the CPU does not reproduce to the last bit.
+`--cpu`'s "defaults, K a hair out" case moves the black plate 0.012 px off the
+line and every such pixel goes. A wandering plate can land a boundary within
+an ulp of a pixel centre anywhere, which is the one pixel 236/255 out in the
+ofxprobe wander case. A documented residual, not a bug to chase further.
+
+**Leaving `kCGLPFAAccelerated` out of a pixel format does not get you the
+software renderer.** CGL is free to hand back the GPU anyway, and does; asking
+for `kCGLRendererGenericFloatID` by `kCGLPFARendererID` is what forces it.
+`RZTEST_RENDERER=software` does that, so what a CI runner measures can be seen
+locally — and what it shows is that Apple's software renderer filters so
+differently (a mean of 7/255 from the GPU on every case) that `--cpu` means
+nothing there. It prints SKIPPED and exits 77, which ctest counts as skipped.
 
 **`std::max` with an initializer list needs one type.** `std::max({ double,
 float, float })` is an ambiguous call, not a conversion, and the error names
@@ -219,11 +279,20 @@ provably never wanders.
     source/Press.{h,cpp}       bounded smooth noise per plate: the wander.
     source/Audio.{h,cpp}       64 bins → a level and an onset.
     source/Controls.*          0..1 host parameters to physical units.
+    source/Print.{h,cpp}       the OpenFX build's render: Configure() (controls
+                               to uniforms, which the FFGL plugin calls too)
+                               and the separate/mip/print passes on the CPU,
+                               mirrored from Shaders.cpp and from the GPU's
+                               own sampling. rztest --cpu holds it.
     source/Shaders.cpp         two passes. kSpotLibrary is shared with the
                                harness's probe.
     source/PassBuffer.*        FFGLFBO with the leak fixed (from tinsel).
     source/Rosette.*           the plugin: parameters, presets, the passes.
     source/Diag.*              a log file, for the shader that will not compile.
+    source/ofx/RosetteOFX.cpp  the OpenFX plugin: parameters, presets, and the
+                               marshalling around Print.cpp. Nothing per-pixel.
+    external/openfx/           the OFX SDK subset (BSD-3), vendored, identical
+                               across the fleet.
     tools/rztest/              the offline harness.
     tools/sweep.py             no control is silently dead.
     tools/verify.sh            all of it.
@@ -240,6 +309,12 @@ Two passes:
    would alias horribly against the dot lattice.
 2. **print** — output size, straight to the host's framebuffer. Four lattices,
    four dots, the ink model, the paper, Mix.
+
+CMake splits the sources the same way: **`rosette_dsp`** is everything with
+no GL in it (Controls, Separation, Screen, Press, Print, the preset table) and
+both plugins link it; **`rosette_core`** is the FFGL side. `ROSETTE_BUILD_FFGL=OFF`
+drops the SDK, GLEW and every FFGL target, which is how the Linux job builds the
+OpenFX plugin with nothing but a compiler.
 
 ### The GLSL spot functions are a fragment, not a shader
 
@@ -331,6 +406,61 @@ makes the model worth believing — `--spot`, `--gain`, `--angle`, `--register`,
 
 ---
 
+## The OpenFX build
+
+`source/ofx/RosetteOFX.cpp`, built from the fleet's pattern (macroblock's CMake
+and release jobs, vertigo's preset handling, flenser's rule that a model which
+is a pure function of time ports and one that integrates does not).
+
+**Shared, not copied.** The separation, dot gain, ink model, spot functions,
+threshold table, wander, parameter curves and preset table come from
+`rosette_dsp`. `print::Configure` turns controls into what the shaders are
+told, and the FFGL plugin's `ProcessOpenGL` calls it too — that refactor
+changed no pixel of the FFGL build (renders before and after are
+byte-identical). What is mirrored is only what the GPU did per fragment, in
+`Print.cpp`: the separate pass, the mip chain, `coverage()` and `main()`, and
+the GPU's own sampling (see the trap above). The GLSL side of those lines is
+not marked `//= mirrored`, because a comment added inside a shader has to be
+added to `demo/plugin.js` too and ships to the demo page; `Shaders.cpp` carries
+an edit-both note beside each shader instead, and `Print.cpp` marks every line
+it copies.
+
+**Rendering.** Separate the whole source into a half-float CMYK buffer (a band
+of rows per thread), build the mip chain, then print the render window (a band
+per thread through `OFX::ImageProcessor`). The threshold table is built once
+per process, on first use, and deliberately never freed (the exit-teardown
+trap); nothing else outlives a render, because OFX renders frames alone, out
+of order and concurrently. `setSupportsTiles( false )`: a cell's tone comes
+from a mip chain over the whole frame. Mix at 0 answers `isIdentity`.
+
+**What differs, and why:**
+
+- **No audio.** The FFT buffer and Audio Drive are not declared; the plugin
+  description says the Resolume build has them. No preset covers them.
+- **Presets write the controls** in one edit block, and a covered control
+  moved off the preset's value drops the menu to Custom — judged by value, as
+  vertigo does, so a host echoing the plugin's own writes cannot un-set it.
+  The FFGL build's override-at-read-time exists only because Resolume ignores
+  value events.
+- **Time is frames over the clip's frame rate.** The wander needs nothing else.
+- **Ink colours and paper are RGB parameters** (`inkC`, …, `paper`): the FFGL
+  build's consecutive red/green/blue triples are what a host shows as a swatch,
+  and in OpenFX a colour parameter is that swatch.
+- **Render scale and pixel aspect.** `Configure` takes both; at 1 they are
+  exactly the FFGL uniforms. Neither has been exercised: ofxprobe renders at
+  scale 1 with square pixels.
+- **The preset menu is first on the page**, where the fleet's OpenFX ports put
+  it. FFGL has it last only because a parameter id can never move.
+
+Script names are permanent — saved projects refer to them: `preset`,
+`blackGeneration`, `totalInk`, `screen`, `dotShape`, `dotGain`, `inkSpread`,
+`angleC/M/Y/K`, `registerCX`…`registerKY`, `pressWander`, `wanderSpeed`,
+`inkC/M/Y/K`, `paper`, `inkDensity`, `plateC/M/Y/K`, `solo`, `mix`, and the
+groups `separationGroup`, `screenGroup`, `pressGroup`, `inkGroup`,
+`outputGroup`.
+
+---
+
 ## What is genuinely verified, and what is assumed
 
 **Verified, by measurement, on this machine (M4 Max, macOS 26.4, 2026-09-21):**
@@ -386,6 +516,30 @@ makes the model worth believing — `--spot`, `--gain`, `--angle`, `--register`,
   | 3840×2160 | 0.501 | 3.0% |
 
   Two passes and no feedback, so it is cheap — about a fifth of tinsel at 4K.
+
+**The OpenFX build, verified 2026-10-03 on the same machine:**
+
+- **It agrees with the GPU.** `rztest --cpu`, and separately the real
+  `Rosette.ofx.bundle` through `ofxprobe` (a CPU OpenFX test host) on the same
+  card — the two give identical numbers, so the marshalling adds nothing. Over
+  16 cases (the defaults at 640×360 and 1920×1080, all six presets half a
+  second in, seven settings across every control group, a soft alpha ramp at
+  half Mix): at most **0.77%** of pixels differ at all, at most **0.0135%** by
+  more than one step, mean at most **0.0021/255**. The control case — Screen
+  0.46 against 0.48 — differs in **70%** of pixels, mean **41.7/255**. The
+  pixels beyond one step are the cell-boundary trap above.
+- **Frames are independent of render order.** Frame 37 of a wandering press,
+  alone, after 0–36, and after 60, 5 and 0 in one instance: byte-identical.
+- **Mix 0 is an identity**, declared to the host and exact when rendered.
+  32-bit float in and out gives the 8-bit result but for one pixel, one
+  step out.
+- **Presets** write their row, drop to Custom when a covered control moves off
+  it, and do not when Registration moves.
+- **37 ms/frame at 1920×1080 on 8 threads** (ofxprobe's pool); 54 ms for the
+  first frame in a process, which builds the threshold table.
+- `tools/verify.sh` checks the OpenFX bundle is universal, exports
+  `OfxGetPlugin`, names its own binary, ad-hoc signs, is the copy a host
+  actually loads, renders, and applies a preset.
 
 **Verified in a real host, once — 2026-09-21, win-lab** (an x64 Windows 11 Pro
 VM with **no GPU**: OpenGL is Mesa llvmpipe dropped in beside Arena; Resolume
@@ -453,8 +607,16 @@ macOS-only.
   "fifteen points".
 - **Dot Shape, Ink Spread and the presets are judged by eye.** Nothing
   measures whether Newspaper looks like newsprint.
-- **No OpenFX port.** Not required for 0.1.0. The browser demo came later; see
-  *The browser demo* above.
+- **The OpenFX build has never been loaded into a real OpenFX host** —
+  Resolve, Vegas, Nuke or Natron — only into `ofxprobe`. A real host's render
+  scale, pixel aspect, premultiplication and parameter panel are unconfirmed.
+  The Windows and Linux OpenFX builds have been compiled by CI and the Linux
+  one dlopened on Rocky 8; neither has rendered a frame. It is not in the
+  v0.1.0 release.
+- **The CPU print matches one GPU.** Everything in `Print.h` about rounding
+  and filtering was measured on an Apple M4. Another graphics card is free to
+  round and filter differently, so its FFGL render may differ from both by an
+  amount nobody has measured.
 - **No user guide**, which is why `StoatworksAbout.h` carries `guide = ""` —
   a link that is not written is left out rather than shown as a button that
   opens a 404. That header is **generated** now: the project is registered in
