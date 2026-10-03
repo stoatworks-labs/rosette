@@ -74,6 +74,16 @@ add_library(rosette_dsp OBJECT
 target_include_directories(rosette_dsp PUBLIC source)
 set_target_properties(rosette_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# The CPU print pass is held against the GPU pixel for pixel, and which
+# multiplies get fused into adds decides which cell a pixel on a cell boundary
+# belongs to. Clang on arm64 fuses by default, inside one expression, where the
+# GPU does not; the one place the GPU does is written as an explicit std::fma in
+# Print.cpp. Off for this file, which also makes the arm64 and x86_64 builds
+# compute the same thing. MSVC does not contract unless asked to.
+if(NOT MSVC)
+    set_source_files_properties(source/Print.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
+
 if(ROSETTE_BUILD_FFGL)
 
 # ---------------------------------------------------------------------------

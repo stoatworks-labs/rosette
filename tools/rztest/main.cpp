@@ -1718,15 +1718,18 @@ int runCpu()
 	//which on an 8-bit edge pixel is a step of one.
 	//
 	//Pixels further out than that are one thing: a cell boundary running
-	//exactly through pixel centres. A 45-degree plate in register puts one on
-	//the diagonal x = y, and there the last bit of the GPU's sin and cos
-	//decides which cell a pixel is in -- one ulp, and the pixel takes its
-	//neighbour's dot. "defaults, K a hair out" moves the black plate 0.012 px
-	//off that line and every such pixel goes.
+	//within an ulp of a pixel centre, where the last bit of the rotation
+	//decides which cell -- and so which cell's tone -- the pixel gets. A
+	//45-degree plate in register puts a boundary exactly on the diagonal
+	//x = y. Print.cpp fuses the rotation the way the GPU's compiler does,
+	//which took those pixels from up to 211/255 apart to up to 18; what is
+	//left is the GPU's interpolated pixel position, which the CPU does not
+	//reproduce to the last bit. "defaults, K a hair out" moves the black
+	//plate 0.012 px off that line and every such pixel goes.
 	//
-	//Measured on an M4 Max: mean at most 0.0033/255, at most 0.083% of pixels
-	//(Square, soft, heavy gain) more than one step out. The bounds are that
-	//with headroom; the control case below misses them by orders of
+	//Measured on an M4 Max: mean at most 0.0021/255, at most 0.0135% of
+	//pixels (Square, soft, heavy gain) more than one step out. The bounds are
+	//that with headroom; the control case below misses them by orders of
 	//magnitude.
 	constexpr double kMeanBound      = 0.01;  //1/255 steps, averaged over every channel
 	constexpr double kBeyondOneBound = 0.002; //fraction of pixels more than one step out

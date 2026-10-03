@@ -42,12 +42,18 @@
       64th, so the step is finer at LOD 0.3 than at LOD 3.3. What comes back
       from the RGBA16F plates is rounded to half once, ties away from zero.
       `SampleTrilinear()`, `SampleThreshold()`.
+    - Which multiplies the shader compiler fuses into adds. The rotation into
+      a plate's frame is evidently built as `fma( s, y, c * x )`, which
+      matters on a cell boundary through pixel centres; `Coverage()` writes
+      exactly that, and the rest of this file is compiled with contraction
+      off, which is what measured closest everywhere else.
 
     Other GPUs are free to do all of these differently -- the GL spec leaves
     mipmap generation and filter precision to the implementation -- so the
-    FFGL build already varies by a little from one graphics card to the
-    next, and Apple's own software renderer differs a great deal. This file
-    matches the GPU it was measured on, and `rztest --cpu` says how closely.
+    FFGL build may itself vary from one graphics card to the next (nobody has
+    measured by how much), and Apple's own software renderer differs a great
+    deal. This file matches the GPU it was measured on, and `rztest --cpu`
+    says how closely.
 
     **Coordinates are GL's**: row 0 at the bottom, a pixel's centre at
     `x + 0.5`. OpenFX uses the same orientation, so nothing flips.

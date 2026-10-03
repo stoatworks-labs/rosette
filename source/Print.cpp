@@ -369,10 +369,20 @@ float Coverage( const Settings& s, const Plates& plates, const float* thresholds
 	const float sn = s.sinAngle[ i ];
 
 	//Into the plate's own frame.
+	//
+	//The shader writes c * rel.x + s * rel.y; the M4's compiler builds it as
+	//one rounded product fused into the other, fma( s, rel.y, c * rel.x ).
+	//That is measured, not guessed: written plainly here, a 45-degree plate in
+	//register has its cell boundary exactly on the pixel centres along x = y,
+	//the two builds put those pixels in different cells, and they came out up
+	//to 211/255 apart; fused this way, 18. std::fma is exact everywhere, so it
+	//is also the same answer on arm64 and on x86_64. The rest of this file is
+	//built with contraction off (CMakeLists.txt), which is what measured
+	//closest for everything else.
 	const float relX = px - s.offset[ i ][ 0 ];//= mirrored
 	const float relY = py - s.offset[ i ][ 1 ];//= mirrored
-	const float qx   = ( c * relX + sn * relY ) / s.screenPx;//= mirrored
-	const float qy   = ( -sn * relX + c * relY ) / s.screenPx;//= mirrored
+	const float qx   = std::fma( sn, relY, c * relX ) / s.screenPx;//= mirrored
+	const float qy   = std::fma( c, relY, -sn * relX ) / s.screenPx;//= mirrored
 
 	const float cellX = std::floor( qx );//= mirrored
 	const float cellY = std::floor( qy );//= mirrored
