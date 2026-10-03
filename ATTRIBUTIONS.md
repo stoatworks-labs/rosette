@@ -32,6 +32,18 @@ Copyright: Milan Ikits, Marcelo E. Magallon and Lev Povalahev
 Windows only, from vcpkg, statically linked. The SDK's headers pull it in for
 the OpenGL function pointers; macOS uses the system OpenGL framework instead.
 
+### OpenFX image effect plug-in API
+
+<https://github.com/AcademySoftwareFoundation/openfx>
+Licence: BSD-3-Clause
+Copyright: OpenFX and contributors to the OpenFX project
+
+Vendored at `external/openfx` — the C headers and the C++ Support library, the
+same copy as the rest of the fleet's OpenFX ports.
+
+The plugin ABI for the DaVinci Resolve, Vegas, Nuke and Natron side of the
+same effect, so one model renders through both host families.
+
 ### zlib
 
 <https://zlib.net>
