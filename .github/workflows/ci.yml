@@ -3,10 +3,9 @@ name: ci
 # Both platforms on every push and pull request, so a Dependabot bump has a
 # status check to gate on and a GLEW-shaped break -- which macOS is
 # structurally blind to, because macOS never links GLEW -- is caught before a
-# tag. There is no Linux job: the CMakeLists branches on APPLE and WIN32, and
-# Resolume has no Linux build.
-#
-# NOTE: this workflow has never run. The repo has no remote yet.
+# tag. Both build the OpenFX plugin as well as the FFGL one (BUILD_OFX is on by
+# default). The Linux OpenFX build and its Rocky 8 load test live in
+# release.yml; Resolume has no Linux build at all.
 on:
   push:
     branches: [main]
@@ -44,8 +43,28 @@ jobs:
       - name: The suites
         # The runner has no GPU, so these fall back to software rasterisation.
         # --names, --defaults, --presets and --wander need no GL at all; the
-        # rest render small frames and are deterministic.
+        # rest render small frames and are deterministic. --cpu holds the GPU
+        # against the OpenFX build's CPU print, which is meaningless against
+        # the software renderer, so it prints SKIPPED and ctest counts it
+        # skipped -- it is run by tools/verify.sh on a Mac with a GPU.
         run: ctest --test-dir build --output-on-failure
+
+      # The OpenFX bundle names its own binary, exports the entry point and
+      # signs. The plist half is a release-time codesign failure with no local
+      # symptom at all -- see the comment in cmake/InfoOFX.plist.in -- so it is
+      # worth a step here as well as in verify.sh and release.yml.
+      - name: OpenFX bundle
+        run: |
+          named=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
+            build/Rosette.ofx.bundle/Contents/Info.plist)
+          test -f "build/Rosette.ofx.bundle/Contents/MacOS/$named"
+          echo "CFBundleExecutable is $named, and it is there"
+          symbols=$(nm -gU "build/Rosette.ofx.bundle/Contents/MacOS/$named")
+          case "$symbols" in
+            *_OfxGetPlugin*) echo "exports OfxGetPlugin" ;;
+            *) echo "no OfxGetPlugin"; exit 1 ;;
+          esac
+          codesign --force --sign - --timestamp=none build/Rosette.ofx.bundle
 
       - name: Presets
         run: python3 tools/check_presets.py
@@ -62,6 +81,8 @@ jobs:
       # manifest, so github-actions is its only Dependabot ecosystem -- and a
       # bump to actions/upload-artifact otherwise touches release.yml alone,
       # a workflow no pull request ever runs.
+      #
+      # build/*.bundle is both plugins: Rosette.bundle and Rosette.ofx.bundle.
       - uses: actions/upload-artifact@v7
         with:
           name: rosette-macos-arm64
@@ -92,5 +113,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: rosette-windows-x86_64
-          path: build/Release/*.dll
+          path: |
+            build/Release/*.dll
+            build/Rosette.ofx.bundle/Contents/Win64/*.ofx
           if-no-files-found: error
