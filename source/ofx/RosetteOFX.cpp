@@ -78,7 +78,8 @@ constexpr const char* kPluginDescription =
 	"over yellow is green -- all fall out of the model rather than being "
 	"drawn. Solo a plate to see its lattice; start from a Preset.\n\n"
 	"The press wander is a pure function of time, so any frame renders on its "
-	"own and scrubbing shows the press at that moment.\n\n"
+	"own and scrubbing shows the press at that moment. Fusion reports no frame "
+	"rate; there, time-based controls assume 24 fps.\n\n"
 	"The Resolume build of this effect is also audio-reactive (Audio Drive "
 	"shakes the plates and throws them on a beat). OpenFX has no audio to "
 	"offer a plugin, so that control is absent here rather than present and "
@@ -123,6 +124,90 @@ const float* thresholdTable()
 {
 	static const std::vector< float >* table = new std::vector< float >( BuildThresholdTable() );
 	return table->data();
+}
+
+//---------------------------------------------------------------------------
+// What the host may not say.
+//
+// DaVinci Resolve's Fusion page provides NO frame rate -- not on the effect,
+// not on any clip -- and the Support library turns a property the host does
+// not know into OFX::Exception::PropertyUnknownToHost. Uncaught, that leaves
+// render() as kOfxStatErrMissingHostFeature and Resolve fails the frame: every
+// frame, because the press wander needs seconds. Its Edit page does provide
+// one. So every host property this plugin reads that is not guaranteed is read
+// here, each inside its own try, with a stated fallback.
+//---------------------------------------------------------------------------
+
+/// What Fusion is assumed to run at: Resolve's default timeline rate. Only
+/// the wander's speed depends on it.
+constexpr double kFallbackFramesPerSecond = 24.0;
+
+/// The first positive, finite frame rate of: the output clip, the source
+/// clip, the effect. Otherwise kFallbackFramesPerSecond.
+double framesPerSecond( const OFX::ImageEffect& effect, const OFX::Clip* output, const OFX::Clip* source )
+{
+	const auto usable = []( double fps ) { return std::isfinite( fps ) && fps > 0.0; };
+
+	try
+	{
+		if( output != nullptr && usable( output->getFrameRate() ) )
+			return output->getFrameRate();
+	}
+	catch( ... )
+	{
+	}
+	try
+	{
+		if( source != nullptr && usable( source->getFrameRate() ) )
+			return source->getFrameRate();
+	}
+	catch( ... )
+	{
+	}
+	try
+	{
+		if( usable( effect.getFrameRate() ) )
+			return effect.getFrameRate();
+	}
+	catch( ... )
+	{
+	}
+	return kFallbackFramesPerSecond;
+}
+
+/// Whether the source is premultiplied. An RGB clip has no alpha to be
+/// premultiplied by, and a host that says "unpremultiplied" about one is
+/// describing something that does not exist; treating it as premultiplied
+/// makes the round trip an identity. A host that will not say is taken to
+/// mean premultiplied, which is what every host this was tried in does say.
+bool sourceIsPremultiplied( const OFX::Clip* source, OFX::PixelComponentEnum components )
+{
+	if( components != OFX::ePixelComponentRGBA )
+		return true;
+	try
+	{
+		return source->getPreMultiplication() != OFX::eImageUnPreMultiplied;
+	}
+	catch( ... )
+	{
+		return true;
+	}
+}
+
+/// The source image's pixel aspect, or 1 if the host does not give a usable
+/// one.
+float pixelAspectOf( const OFX::Image* image )
+{
+	try
+	{
+		const double par = image->getPixelAspectRatio();
+		if( std::isfinite( par ) && par > 0.0 )
+			return static_cast< float >( par );
+	}
+	catch( ... )
+	{
+	}
+	return 1.0f;
 }
 
 //---------------------------------------------------------------------------
@@ -352,25 +437,19 @@ public:
 		if( width <= 0 || height <= 0 )
 			return;
 
-		//An RGB clip has no alpha to be premultiplied by, and a host that says
-		//"unpremultiplied" about one is describing something that does not
-		//exist. Treating it as premultiplied makes the round trip an identity.
-		const bool premultiplied = comps != OFX::ePixelComponentRGBA
-		                           || srcClip->getPreMultiplication() != OFX::eImageUnPreMultiplied;
+		const bool premultiplied = sourceIsPremultiplied( srcClip, comps );
 
-		//OFX time is FRAMES. Seconds come from the clip's frame rate, and a
-		//host that reports zero would otherwise divide by it.
-		double fps = srcClip->getFrameRate();
-		if( !( fps > 0.0 ) )
-			fps = dstClip->getFrameRate();
-		if( !( fps > 0.0 ) )
-			fps = 25.0;
+		//OFX time is FRAMES. Seconds are frames over the frame rate, which
+		//Fusion does not report at all -- see framesPerSecond().
+		const double fps = framesPerSecond( *this, dstClip, srcClip );
 
 		//A proxy render at half size gets a screen and a press half as many
 		//pixels across, so it looks like the full render. An anamorphic clip
 		//keeps its dots round.
-		const float scale = args.renderScale.x > 0.0 ? static_cast< float >( args.renderScale.x ) : 1.0f;
-		const float par   = src->getPixelAspectRatio() > 0.0 ? static_cast< float >( src->getPixelAspectRatio() ) : 1.0f;
+		const float scale = std::isfinite( args.renderScale.x ) && args.renderScale.x > 0.0
+		                        ? static_cast< float >( args.renderScale.x )
+		                        : 1.0f;
+		const float par = pixelAspectOf( src.get() );
 
 		const print::Settings settings = print::Configure( controlsAt( args.time ), args.time / fps, width, height, scale, par );
 

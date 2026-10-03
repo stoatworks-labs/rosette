@@ -40,7 +40,9 @@
 #   openfx        the OpenFX bundle: its plist names the binary on disk, it is
 #                 universal, it exports OfxGetPlugin, it ad-hoc signs, and a
 #                 host (ofxprobe) loads it from THIS build, renders through it
-#                 and applies a preset through it
+#                 and applies a preset through it -- and, where an ofxprobe
+#                 with `--quirks fusion` is to hand, renders with no frame
+#                 rate from the host, as Resolve's Fusion page gives it none
 #   bench         the render cost, for the record. Not pass/fail -- there is
 #                 no threshold worth asserting on somebody else's GPU -- but
 #                 a verify run leaves a timing on the record, which is what
@@ -365,6 +367,39 @@ if [ "$(uname)" = "Darwin" ]; then
 		else
 			printf '   skipped: ofxprobe not built at %s\n' "$OFXPROBE"
 		fi
+
+		# Resolve's Fusion page reports no frame rate -- not on the effect,
+		# not on any clip -- and the first build let the Support library's
+		# exception out of render(), which Resolve showed as every frame of
+		# the comp failing. A probe with `--quirks fusion` hosts it that way.
+		# OFXHOST names one (the fleet's extended test host); the bridge's own
+		# ofxprobe is used if it has learned the flag. Skipped otherwise.
+		QPROBE="${OFXHOST:-$OFXPROBE}"
+		qhelp=$("$QPROBE" --help 2>&1)
+		case "$qhelp" in
+			*"--quirks"*)
+				qargs=( --dir "$BUILD" --render com.stoatworks.rosette --size 320x180
+				        --set pressWander=0.5 --time 37 )
+				case "$qhelp" in *"--no-system-dirs"*) qargs=( --no-system-dirs "${qargs[@]}" ) ;; esac
+				fusion=$("$QPROBE" "${qargs[@]}" --quirks fusion 2>&1)
+				at24=$("$QPROBE" "${qargs[@]}" --frame-rate 24 2>&1)
+				fhash=$(printf '%s\n' "$fusion" | sed -n 's/.*out hash *fnv1a64 \([0-9a-f]*\).*/\1/p')
+				hash24=$(printf '%s\n' "$at24" | sed -n 's/.*out hash *fnv1a64 \([0-9a-f]*\).*/\1/p')
+				case "$fusion" in
+					*"rendered 320x180"*)
+						if [ -n "$fhash" ] && [ "$fhash" = "$hash24" ]; then
+							pass "renders with no host frame rate (Fusion), exactly as at 24 fps"
+						elif [ -n "$fhash" ]; then
+							fail "renders with no host frame rate, but not as at 24 fps ($fhash against $hash24)"
+						else
+							pass "renders with no host frame rate (Fusion)"
+						fi ;;
+					*) fail "does not render with no host frame rate -- Resolve's Fusion page would fail every frame"
+					   printf '%s\n' "$fusion" | grep -i 'fail' | sed 's/^/       /' ;;
+				esac
+				;;
+			*) printf '   skipped: no ofxprobe with --quirks (set OFXHOST to one) -- the Fusion case is unchecked\n' ;;
+		esac
 	fi
 fi
 

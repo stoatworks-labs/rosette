@@ -443,6 +443,16 @@ from a mip chain over the whole frame. Mix at 0 answers `isIdentity`.
   The FFGL build's override-at-read-time exists only because Resolume ignores
   value events.
 - **Time is frames over the clip's frame rate.** The wander needs nothing else.
+  **Fusion reports no frame rate; there, time-based controls assume 24 fps.**
+  Resolve's Fusion page gives no `kOfxImageEffectPropFrameRate` on the effect
+  or any clip, and the Support library turns the missing property into an
+  exception: the first build let it escape `render`, and Resolve failed every
+  frame (found by the lead in Resolve 21.1, 2026-10-03). `framesPerSecond()`
+  tries the output clip, the source clip and the effect, each in its own
+  try, and falls back to 24, Resolve's default timeline rate. The source's
+  premultiplication and pixel aspect are read the same guarded way. Nothing
+  here reads the frame range, the unmapped rate or range, or the render-status
+  properties, which Fusion also leaves out or reports as [0, 0].
 - **Ink colours and paper are RGB parameters** (`inkC`, …, `paper`): the FFGL
   build's consecutive red/green/blue triples are what a host shows as a swatch,
   and in OpenFX a colour parameter is that swatch.
@@ -607,9 +617,12 @@ macOS-only.
   "fifteen points".
 - **Dot Shape, Ink Spread and the presets are judged by eye.** Nothing
   measures whether Newspaper looks like newsprint.
-- **The OpenFX build has never been loaded into a real OpenFX host** —
-  Resolve, Vegas, Nuke or Natron — only into `ofxprobe`. A real host's render
-  scale, pixel aspect, premultiplication and parameter panel are unconfirmed.
+- **The OpenFX build has been in one real host, once.** The lead loaded the
+  first build into DaVinci Resolve Studio 21.1 as a Fusion tool, and it failed
+  every frame: Fusion reports no frame rate (see *The OpenFX build*). The fix
+  is checked only against `ofxprobe`'s Fusion quirk mode, pending a re-run in
+  Resolve. Vegas, Nuke and Natron are untried. A real host's render scale,
+  pixel aspect, premultiplication and parameter panel are unconfirmed.
   The Windows and Linux OpenFX builds have been compiled by CI and the Linux
   one dlopened on Rocky 8; neither has rendered a frame. It is not in the
   v0.1.0 release.

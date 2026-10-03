@@ -15,8 +15,9 @@
 > The [OpenFX build](#openfx--resolve-vegas-nuke-natron) prints on the CPU and
 > is held against the GPU pixel for pixel — the same card through both comes
 > out identical in **over 99% of pixels**, a mean of **0.002/255** apart — but
-> it has only been run in a test host, never in Resolve or any real OpenFX
-> application. Check it in your own rig before trusting it in a show.
+> its one trip into a real host, DaVinci Resolve's Fusion page, failed every
+> frame, and the fix for that has so far only been checked in a test host.
+> Check it in your own rig before trusting it in a show.
 
 Offset litho as an FFGL effect for [Resolume](https://resolume.com) Arena and
 Avenue, and an [OpenFX](https://openeffects.org) effect for DaVinci Resolve,
@@ -177,7 +178,10 @@ since v0.1.0, so that release has no OpenFX download — the next one will.
 - **The press runs on the timeline.** The wander is a pure function of time —
   bounded noise, not an accumulating walk — so it needs no history: any frame
   renders on its own, in any order, and scrubbing shows the press at that
-  moment. Time is the frame number over the clip's frame rate.
+  moment. Time is the frame number over the clip's frame rate. **Fusion
+  reports no frame rate; there, time-based controls assume 24 fps** — which
+  here means Wander Speed is exact on a 24 fps timeline and scaled by the
+  ratio on any other.
 - **The ink colours and the paper are colour pickers** rather than three
   sliders each. Same values, same defaults.
 - **A proxy render should look like the full one.** At a reduced render scale
@@ -313,10 +317,14 @@ Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
 no composition save or reload and no preset recall were exercised in the host,
 and whether the plugin settles on Resolume's clock unit is unconfirmed — see
 [AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
-workflow have both run and passed on GitHub. **The OpenFX build has never been
-loaded into Resolve, Vegas, Nuke or Natron** — only into `ofxprobe`, which
-renders at full scale, 8-bit or float, premultiplied — so a real host's proxy
-render scale, its premultiplication and its parameter panel are unconfirmed;
+workflow have both run and passed on GitHub. **The OpenFX build has been in one
+real host, once:** DaVinci Resolve Studio 21.1, as a Fusion tool, where the
+first build failed every frame because Fusion reports no frame rate. The fix
+(a guarded read with a 24 fps fallback) is checked against `ofxprobe`'s Fusion
+mode and not yet in Resolve. Vegas, Nuke and Natron are untried, and
+`ofxprobe` renders at full scale, 8-bit or float, premultiplied — so a real
+host's proxy render scale, its premultiplication and its parameter panel are
+unconfirmed;
 its Windows and Linux builds have been compiled by CI and the Linux one loaded
 on Rocky 8, and neither has rendered a frame. The `--cpu` agreement is
 measured against an Apple M4's GPU; how far another card's FFGL render sits
