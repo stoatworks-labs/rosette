@@ -33,15 +33,16 @@ Vegas, Nuke and Natron.
 
 ## Download
 
-**[v0.1.0](https://github.com/stoatworks-labs/rosette/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+**[v0.2.0](https://github.com/stoatworks-labs/rosette/releases/tag/v0.2.0)** — prebuilt for macOS, Windows and Linux. Pick your platform:
 
 <details>
 <summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`rosette-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/rosette/releases/download/v0.1.0/rosette-0.1.0-macos-universal.dmg) | 218 KB |
-| Universal (Apple Silicon + Intel) · .zip archive | [`rosette-macos-universal.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-macos-universal.zip) | 181 KB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`rosette-0.2.0-macos-universal.dmg`](https://github.com/stoatworks-labs/rosette/releases/download/v0.2.0/rosette-0.2.0-macos-universal.dmg) | 235 KB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`rosette-macos-universal.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-macos-universal.zip) | 192 KB |
+| Universal (Apple Silicon + Intel) · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rosette-ofx-macos-universal.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-ofx-macos-universal.zip) | 261 KB |
 
 </details>
 
@@ -50,8 +51,18 @@ Vegas, Nuke and Natron.
 
 | Build | Download | Size |
 | --- | --- | --- |
-| x64 · .exe installer | [`rosette-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/rosette/releases/download/v0.1.0/rosette-0.1.0-windows-x86_64-setup.exe) | 223 KB |
-| x64 · .zip archive | [`rosette-windows-x86_64.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-windows-x86_64.zip) | 116 KB |
+| x64 · .exe installer | [`rosette-0.2.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/rosette/releases/download/v0.2.0/rosette-0.2.0-windows-x86_64-setup.exe) | 227 KB |
+| x64 · .zip archive | [`rosette-windows-x86_64.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-windows-x86_64.zip) | 117 KB |
+| x64 · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rosette-ofx-windows-x86_64.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-ofx-windows-x86_64.zip) | 79 KB |
+
+</details>
+
+<details>
+<summary><b>Linux</b> — x64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .zip archive (OpenFX — Resolve, Vegas, Nuke) | [`rosette-ofx-linux-x86_64.zip`](https://github.com/stoatworks-labs/rosette/releases/latest/download/rosette-ofx-linux-x86_64.zip) | 716 KB |
 
 </details>
 
