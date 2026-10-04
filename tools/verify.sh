@@ -55,6 +55,22 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+# resolume-ofx-bridge, for ofxprobe. It sits beside this repo's checkout --
+# and from a git worktree `..` is the worktrees folder, not Projects/resolume,
+# so the main checkout is found through git's common dir as well.
+# ROSETTE_BRIDGE overrides both, and OFXPROBE the probe itself.
+BRIDGE="${ROSETTE_BRIDGE:-}"
+if [ -z "$BRIDGE" ]; then
+	for candidate in "../resolume-ofx-bridge" \
+	                 "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")/../resolume-ofx-bridge"; do
+		if [ -d "$candidate/build" ]; then
+			BRIDGE="$candidate"
+			break
+		fi
+	done
+fi
+BRIDGE="${BRIDGE:-../resolume-ofx-bridge}"
+
 BUILD="${BUILD:-build-universal}"
 failures=0
 
@@ -333,8 +349,7 @@ if [ "$(uname)" = "Darwin" ]; then
 		# and takes the FIRST bundle carrying an identifier, so an installed
 		# copy would be measured instead of this build -- hence the manifest's
 		# bundlePath is checked before anything is believed.
-		OFXPROBE="${OFXPROBE:-../resolume-ofx-bridge/build/ofxprobe}"
-		[ -x "$OFXPROBE" ] || OFXPROBE="$HOME/Projects/resolume/resolume-ofx-bridge/build/ofxprobe"
+		OFXPROBE="${OFXPROBE:-$BRIDGE/build/ofxprobe}"
 		if [ -x "$OFXPROBE" ]; then
 			# The manifest echoes the --dir it was given, so give it a full path.
 			here=$(cd "$BUILD" && pwd)
