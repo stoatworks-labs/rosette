@@ -181,10 +181,10 @@ OpenFX build.
 - **The press runs on the timeline.** The wander is a pure function of time —
   bounded noise, not an accumulating walk — so it needs no history: any frame
   renders on its own, in any order, and scrubbing shows the press at that
-  moment. Time is the frame number over the clip's frame rate. **Fusion
-  reports no frame rate; there, time-based controls assume 24 fps** — which
-  here means Wander Speed is exact on a 24 fps timeline and scaled by the
-  ratio on any other.
+  moment. Time is the frame number over the clip's frame rate. **Resolve's
+  Fusion page reports the frame rate on the effect but not on its clips; the
+  plugin reads the effect's, and assumes 24 fps only where a host reports
+  none** — so in Fusion, too, Wander Speed follows the timeline's rate.
 - **The ink colours and the paper are colour pickers** rather than three
   sliders each. Same values, same defaults.
 - **A proxy render should look like the full one.** At a reduced render scale
@@ -290,8 +290,8 @@ host:
 
 **The OpenFX build in DaVinci Resolve**, 2026-10-04: in Resolve Studio 21.1 on
 macOS, as a Fusion tool, it renders **byte-identical** to the test host at
-24 fps, the rate it assumes there because Fusion reports none. The first build
-failed every frame in the same place for that reason.
+24 fps. Fusion reports the frame rate on the effect but not on its clips, and
+the first build, which read a clip's, failed every frame in the same place.
 
 **The Resolume build in a real host, once.** On 2026-09-21 an x64 Windows DLL
 was cross-compiled in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
@@ -328,9 +328,9 @@ and whether the plugin settles on Resolume's clock unit is unconfirmed — see
 [AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
 workflow have both run and passed on GitHub. **The OpenFX build has been in one
 real host:** DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool, where the
-first build failed every frame because Fusion reports no frame rate, and the
-fixed one (a guarded read with a 24 fps fallback) renders byte-identical to
-the test host. Vegas, Nuke and Natron are untried, and
+first build failed every frame because Fusion reports no frame rate on its
+clips, and the fixed one (guarded reads that reach the effect's rate) renders
+byte-identical to the test host. Vegas, Nuke and Natron are untried, and
 `ofxprobe` renders at full scale, 8-bit or float, premultiplied — so a real
 host's proxy render scale, its premultiplication and its parameter panel are
 unconfirmed;

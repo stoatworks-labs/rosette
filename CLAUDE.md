@@ -28,8 +28,9 @@ separation.
 ## Verify
 - Everything: `tools/verify.sh` (fresh universal build + every check, ~10 s warm)
 - With `OFXHOST=<an ofxprobe that has --quirks fusion>` it also renders the
-  OpenFX plugin the way Resolve's Fusion page hosts it (no frame rate); without
-  one that step says skipped
+  OpenFX plugin with no frame rate anywhere (stricter than Resolve's Fusion
+  page, which leaves it off the clips but gives the effect's); without one
+  that step says skipped
 - GLSL spot functions vs the C++: `./build/rztest --spot`
 - Printed area vs the dot-gain curve: `./build/rztest --gain`
 - A lattice's angle and pitch: `./build/rztest --angle`
@@ -138,10 +139,11 @@ separation.
 - No user guide.
 - The OpenFX build's one real host is Resolve Studio 21.1 on macOS, as a
   Fusion tool. The first build failed every frame there: Fusion reports no
-  frame rate. Fixed with a guarded read and a 24 fps fallback, which renders
-  byte-identical to the test host at 24 fps in Resolve (2026-10-04). Vegas,
-  Nuke and Natron are untried; the Windows and Linux OpenFX builds have never
-  rendered in a host. First released in v0.2.0.
+  frame rate on its clips, only on the effect. Fixed with guarded reads that
+  reach the effect's rate (24 fps only where a host reports none), which
+  renders byte-identical to the test host at 24 fps in Resolve (2026-10-04).
+  Vegas, Nuke and Natron are untried; the Windows and Linux OpenFX builds have
+  never rendered in a host. First released in v0.2.0.
 - Any host property that is not guaranteed is read inside its own try with a
   fallback (`framesPerSecond()` and friends in RosetteOFX.cpp). An exception
   out of `render` is a failed frame in Resolve.

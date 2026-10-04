@@ -443,18 +443,22 @@ from a mip chain over the whole frame. Mix at 0 answers `isIdentity`.
   The FFGL build's override-at-read-time exists only because Resolume ignores
   value events.
 - **Time is frames over the clip's frame rate.** The wander needs nothing else.
-  **Fusion reports no frame rate; there, time-based controls assume 24 fps.**
-  Resolve's Fusion page gives no `kOfxImageEffectPropFrameRate` on the effect
-  or any clip, and the Support library turns the missing property into an
-  exception: the first build let it escape `render`, and Resolve failed every
-  frame (found by the lead in Resolve 21.1, 2026-10-03). `framesPerSecond()`
-  tries the output clip, the source clip and the effect, each in its own
-  try, and falls back to 24, Resolve's default timeline rate. The lead re-ran
-  the fixed build in Resolve 21.1 on 2026-10-04: as a Fusion tool it renders
-  byte-identical to the test host at 24 fps. The source's
-  premultiplication and pixel aspect are read the same guarded way. Nothing
-  here reads the frame range, the unmapped rate or range, or the render-status
-  properties, which Fusion also leaves out or reports as [0, 0].
+  **Resolve's Fusion page reports the frame rate on the effect but not on its
+  clips; the plugin reads the effect's, and assumes 24 fps only where a host
+  reports none.** There `kOfxImageEffectPropFrameRate` is absent from the
+  source and output clips but present on the effect, where it follows the
+  timeline (24 in a 24 fps project, 25 in a 25 fps one; measured in Resolve
+  21.1, 2026-10-04). The Support library turns a missing property into an
+  exception: the first build read the clip's rate, let the exception escape
+  `render`, and Resolve failed every frame (found by the lead in Resolve 21.1,
+  2026-10-03). `framesPerSecond()` tries the output clip, the source clip and
+  the effect, each in its own try, so in Fusion it gets the effect's rate; it
+  falls back to 24, Resolve's default timeline rate, only where none of them
+  answers. The lead re-ran the fixed build in Resolve 21.1 on 2026-10-04: as
+  a Fusion tool it renders byte-identical to the test host at 24 fps. The
+  source's premultiplication and pixel aspect are read the same guarded way.
+  Nothing here reads the frame range, nor the unmapped rate and range or the
+  render-status properties, which Fusion also leaves out.
 - **Ink colours and paper are RGB parameters** (`inkC`, …, `paper`): the FFGL
   build's consecutive red/green/blue triples are what a host shows as a swatch,
   and in OpenFX a colour parameter is that swatch.
@@ -636,7 +640,8 @@ macOS-only.
   measures whether Newspaper looks like newsprint.
 - **The OpenFX build has been in one real host.** The lead loaded the
   first build into DaVinci Resolve Studio 21.1 on macOS as a Fusion tool, and
-  it failed every frame: Fusion reports no frame rate (see *The OpenFX build*).
+  it failed every frame: Fusion reports no frame rate on its clips, where that
+  build read it (see *The OpenFX build*).
   The fixed build, re-run there on 2026-10-04, renders byte-identical to the
   test host at 24 fps. Vegas, Nuke and Natron are untried. A real host's
   render scale, pixel aspect, premultiplication and parameter panel are

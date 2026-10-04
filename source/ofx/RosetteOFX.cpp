@@ -78,8 +78,9 @@ constexpr const char* kPluginDescription =
 	"over yellow is green -- all fall out of the model rather than being "
 	"drawn. Solo a plate to see its lattice; start from a Preset.\n\n"
 	"The press wander is a pure function of time, so any frame renders on its "
-	"own and scrubbing shows the press at that moment. Fusion reports no frame "
-	"rate; there, time-based controls assume 24 fps.\n\n"
+	"own and scrubbing shows the press at that moment. Resolve's Fusion page "
+	"reports the frame rate on the effect but not on its clips; the plugin "
+	"reads the effect's, and assumes 24 fps only where a host reports none.\n\n"
 	"The Resolume build of this effect is also audio-reactive (Audio Drive "
 	"shakes the plates and throws them on a beat). OpenFX has no audio to "
 	"offer a plugin, so that control is absent here rather than present and "
@@ -129,16 +130,18 @@ const float* thresholdTable()
 //---------------------------------------------------------------------------
 // What the host may not say.
 //
-// DaVinci Resolve's Fusion page provides NO frame rate -- not on the effect,
-// not on any clip -- and the Support library turns a property the host does
-// not know into OFX::Exception::PropertyUnknownToHost. Uncaught, that leaves
-// render() as kOfxStatErrMissingHostFeature and Resolve fails the frame: every
-// frame, because the press wander needs seconds. Its Edit page does provide
-// one. So every host property this plugin reads that is not guaranteed is read
-// here, each inside its own try, with a stated fallback.
+// DaVinci Resolve's Fusion page provides a frame rate on the effect but NOT on
+// its clips (21.1, measured 2026-10-04), and the Support library turns a
+// property the host does not know into OFX::Exception::PropertyUnknownToHost.
+// The first build read the clip's rate. Uncaught, that left render() as
+// kOfxStatErrMissingHostFeature and Resolve failed the frame: every frame,
+// because the press wander needs seconds. Its Edit page does provide one. So
+// every host property this plugin reads that is not guaranteed is read here,
+// each inside its own try, with a stated fallback.
 //---------------------------------------------------------------------------
 
-/// What Fusion is assumed to run at: Resolve's default timeline rate. Only
+/// The rate assumed where no host property gives one: Resolve's default
+/// timeline rate. Fusion gives the effect's, so it is not used there. Only
 /// the wander's speed depends on it.
 constexpr double kFallbackFramesPerSecond = 24.0;
 
@@ -457,7 +460,8 @@ public:
 		const bool premultiplied = sourceIsPremultiplied( srcClip, comps );
 
 		//OFX time is FRAMES. Seconds are frames over the frame rate, which
-		//Fusion does not report at all -- see framesPerSecond().
+		//Fusion reports on the effect but not on the clips -- see
+		//framesPerSecond().
 		const double fps = framesPerSecond( *this, dstClip, srcClip );
 
 		//A proxy render at half size gets a screen and a press half as many

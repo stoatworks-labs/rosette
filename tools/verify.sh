@@ -42,7 +42,8 @@
 #                 host (ofxprobe) loads it from THIS build, renders through it
 #                 and applies a preset through it -- and, where an ofxprobe
 #                 with `--quirks fusion` is to hand, renders with no frame
-#                 rate from the host, as Resolve's Fusion page gives it none
+#                 rate from the host (stricter than Resolve's Fusion page,
+#                 which leaves it off the clips but gives the effect's)
 #   bench         the render cost, for the record. Not pass/fail -- there is
 #                 no threshold worth asserting on somebody else's GPU -- but
 #                 a verify run leaves a timing on the record, which is what
@@ -383,10 +384,12 @@ if [ "$(uname)" = "Darwin" ]; then
 			printf '   skipped: ofxprobe not built at %s\n' "$OFXPROBE"
 		fi
 
-		# Resolve's Fusion page reports no frame rate -- not on the effect,
-		# not on any clip -- and the first build let the Support library's
-		# exception out of render(), which Resolve showed as every frame of
-		# the comp failing. A probe with `--quirks fusion` hosts it that way.
+		# Resolve's Fusion page reports the frame rate on the effect but not
+		# on its clips, and the first build, which read a clip's, let the
+		# Support library's exception out of render(), which Resolve showed as
+		# every frame of the comp failing. A probe with `--quirks fusion` is
+		# stricter than Fusion: it withholds the effect's rate too, so this
+		# renders with no host frame rate at all, on the 24 fps fallback.
 		# OFXHOST names one (the fleet's extended test host); the bridge's own
 		# ofxprobe is used if it has learned the flag. Skipped otherwise.
 		QPROBE="${OFXHOST:-$OFXPROBE}"
@@ -403,13 +406,13 @@ if [ "$(uname)" = "Darwin" ]; then
 				case "$fusion" in
 					*"rendered 320x180"*)
 						if [ -n "$fhash" ] && [ "$fhash" = "$hash24" ]; then
-							pass "renders with no host frame rate (Fusion), exactly as at 24 fps"
+							pass "renders with no host frame rate (--quirks fusion), exactly as at 24 fps"
 						elif [ -n "$fhash" ]; then
 							fail "renders with no host frame rate, but not as at 24 fps ($fhash against $hash24)"
 						else
-							pass "renders with no host frame rate (Fusion)"
+							pass "renders with no host frame rate (--quirks fusion)"
 						fi ;;
-					*) fail "does not render with no host frame rate -- Resolve's Fusion page would fail every frame"
+					*) fail "does not render with no host frame rate -- how the first build failed in Resolve's Fusion page"
 					   printf '%s\n' "$fusion" | grep -i 'fail' | sed 's/^/       /' ;;
 				esac
 				;;
