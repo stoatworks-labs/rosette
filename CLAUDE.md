@@ -136,10 +136,12 @@ separation.
   frame timing on Windows — nothing there was timed.
 - The plugin's clock unit inside Arena is unconfirmed (`AGENTS.md`).
 - No user guide.
-- The OpenFX build's one real-host run (Resolve 21.1, Fusion page) failed
-  every frame: Fusion reports no frame rate. Fixed with a guarded read and a
-  24 fps fallback, checked only in `ofxprobe --quirks fusion` so far. Vegas,
-  Nuke and Natron are untried. Not in the v0.1.0 release.
+- The OpenFX build's one real host is Resolve Studio 21.1 on macOS, as a
+  Fusion tool. The first build failed every frame there: Fusion reports no
+  frame rate. Fixed with a guarded read and a 24 fps fallback, which renders
+  byte-identical to the test host at 24 fps in Resolve (2026-10-04). Vegas,
+  Nuke and Natron are untried; the Windows and Linux OpenFX builds have never
+  rendered in a host. First released in v0.2.0.
 - Any host property that is not guaranteed is read inside its own try with a
   fallback (`framesPerSecond()` and friends in RosetteOFX.cpp). An exception
   out of `render` is a failed frame in Resolve.

@@ -14,9 +14,10 @@
 > software rasteriser, never on a GPU in Resolume, and never in Arena on macOS.
 > The [OpenFX build](#openfx--resolve-vegas-nuke-natron) prints on the CPU and
 > is held against the GPU pixel for pixel — the same card through both comes
-> out identical in **over 99% of pixels**, a mean of **0.002/255** apart — but
-> its one trip into a real host, DaVinci Resolve's Fusion page, failed every
-> frame, and the fix for that has so far only been checked in a test host.
+> out identical in **over 99% of pixels**, a mean of **0.002/255** apart — and
+> in DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool, it renders
+> **byte-identical** to the test host. It has never been in Vegas, Nuke or
+> Natron, and its Windows and Linux builds have never rendered in a host.
 > Check it in your own rig before trusting it in a show.
 
 Offset litho as an FFGL effect for [Resolume](https://resolume.com) Arena and
@@ -159,8 +160,10 @@ Linux    /usr/OFX/Plugins/
 ```
 
 The Linux build is built against glibc 2.28 so that it loads on Rocky 8, the
-Linux Resolve supports; anything newer loads it too. The OpenFX build is new
-since v0.1.0, so that release has no OpenFX download — the next one will.
+Linux Resolve supports; anything newer loads it too. The OpenFX zips ship from
+v0.2.0 — `rosette-ofx-macos-universal.zip`, `rosette-ofx-windows-x86_64.zip`
+and `rosette-ofx-linux-x86_64.zip`, beside the Resolume ones. v0.1.0 had no
+OpenFX build.
 
 **What is different from the Resolume build, and why:**
 
@@ -248,8 +251,9 @@ measures rather than previews:
 
 ## Status
 
-**v0.1.0, and honestly early.** Verified by measurement on an M4 Max, macOS
-26.4, 2026-09-21:
+**v0.2.0, and honestly early.** v0.2.0 added the OpenFX build; the Resolume
+build renders as it did in v0.1.0, and was verified by measurement on an M4
+Max, macOS 26.4, 2026-09-21:
 
 | Check | Result |
 | --- | --- |
@@ -284,8 +288,13 @@ host:
 | Bundle | universal, exports `OfxGetPlugin`, `CFBundleExecutable` on disk, ad-hoc signs |
 | Render cost | **37 ms/frame** at 1920×1080 on 8 threads (the first frame in a process 54 ms: it builds the threshold table) |
 
-**In a real host, once.** On 2026-09-21 an x64 Windows DLL was cross-compiled
-in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
+**The OpenFX build in DaVinci Resolve**, 2026-10-04: in Resolve Studio 21.1 on
+macOS, as a Fusion tool, it renders **byte-identical** to the test host at
+24 fps, the rate it assumes there because Fusion reports none. The first build
+failed every frame in the same place for that reason.
+
+**The Resolume build in a real host, once.** On 2026-09-21 an x64 Windows DLL
+was cross-compiled in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
 `cmake -A x64`, vcpkg triplet `x64-windows-static-md` — there is no x64 Windows
 machine in the *local* build loop) and taken to win-lab, an x64 Windows 11 Pro VM
 with **no GPU**, where OpenGL comes from Mesa llvmpipe dropped in beside Arena.
@@ -318,10 +327,10 @@ no composition save or reload and no preset recall were exercised in the host,
 and whether the plugin settles on Resolume's clock unit is unconfirmed — see
 [AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
 workflow have both run and passed on GitHub. **The OpenFX build has been in one
-real host, once:** DaVinci Resolve Studio 21.1, as a Fusion tool, where the
-first build failed every frame because Fusion reports no frame rate. The fix
-(a guarded read with a 24 fps fallback) is checked against `ofxprobe`'s Fusion
-mode and not yet in Resolve. Vegas, Nuke and Natron are untried, and
+real host:** DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool, where the
+first build failed every frame because Fusion reports no frame rate, and the
+fixed one (a guarded read with a 24 fps fallback) renders byte-identical to
+the test host. Vegas, Nuke and Natron are untried, and
 `ofxprobe` renders at full scale, 8-bit or float, premultiplied — so a real
 host's proxy render scale, its premultiplication and its parameter panel are
 unconfirmed;

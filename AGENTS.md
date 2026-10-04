@@ -449,7 +449,9 @@ from a mip chain over the whole frame. Mix at 0 answers `isIdentity`.
   exception: the first build let it escape `render`, and Resolve failed every
   frame (found by the lead in Resolve 21.1, 2026-10-03). `framesPerSecond()`
   tries the output clip, the source clip and the effect, each in its own
-  try, and falls back to 24, Resolve's default timeline rate. The source's
+  try, and falls back to 24, Resolve's default timeline rate. The lead re-ran
+  the fixed build in Resolve 21.1 on 2026-10-04: as a Fusion tool it renders
+  byte-identical to the test host at 24 fps. The source's
   premultiplication and pixel aspect are read the same guarded way. Nothing
   here reads the frame range, the unmapped rate or range, or the render-status
   properties, which Fusion also leaves out or reports as [0, 0].
@@ -617,15 +619,15 @@ macOS-only.
   "fifteen points".
 - **Dot Shape, Ink Spread and the presets are judged by eye.** Nothing
   measures whether Newspaper looks like newsprint.
-- **The OpenFX build has been in one real host, once.** The lead loaded the
-  first build into DaVinci Resolve Studio 21.1 as a Fusion tool, and it failed
-  every frame: Fusion reports no frame rate (see *The OpenFX build*). The fix
-  is checked only against `ofxprobe`'s Fusion quirk mode, pending a re-run in
-  Resolve. Vegas, Nuke and Natron are untried. A real host's render scale,
-  pixel aspect, premultiplication and parameter panel are unconfirmed.
-  The Windows and Linux OpenFX builds have been compiled by CI and the Linux
-  one dlopened on Rocky 8; neither has rendered a frame. It is not in the
-  v0.1.0 release.
+- **The OpenFX build has been in one real host.** The lead loaded the
+  first build into DaVinci Resolve Studio 21.1 on macOS as a Fusion tool, and
+  it failed every frame: Fusion reports no frame rate (see *The OpenFX build*).
+  The fixed build, re-run there on 2026-10-04, renders byte-identical to the
+  test host at 24 fps. Vegas, Nuke and Natron are untried. A real host's
+  render scale, pixel aspect, premultiplication and parameter panel are
+  unconfirmed. The Windows and Linux OpenFX builds have been compiled by CI
+  and the Linux one dlopened on Rocky 8; neither has rendered a frame. It was
+  first released in v0.2.0.
 - **The CPU print matches one GPU.** Everything in `Print.h` about rounding
   and filtering was measured on an Apple M4. Another graphics card is free to
   round and filter differently, so its FFGL render may differ from both by an
@@ -663,4 +665,5 @@ macOS-only.
 - **The Riso preset puts the cyan separation on Riso blue and the magenta on
   fluorescent pink**, which is two-colour separation by reuse rather than a
   proper duotone. A real duotone would map luminance onto two inks with its
-  own curves per ink, and that is probably the v0.2 feature.
+  own curves per ink, and that is probably a later release's feature (v0.2.0
+  went to the OpenFX build).
