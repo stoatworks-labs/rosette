@@ -2,32 +2,29 @@
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
 > (Anthropic), directed and reviewed by a human author. The printing model is
-> not asserted but measured: an offline harness drives the real plugin class in
-> a headless GL context and checks each physical claim against an independent
-> statement of the same arithmetic — the GLSL spot functions against their C++
-> originals over **264,196 points with zero disagreements past 1e-5**, printed
-> area against the dot-gain curve to **1%**, a screen angle recovered from the
-> dots' own centroids to **0.06°**, a registration offset to **0.05 px**, and
-> two solid inks overprinting **bit-exactly** as the ink colours predict (see
-> [Status](#status)). It has since been **registered, loaded and instantiated
-> in Resolume Arena 7.27.1** on Windows, with its shaders compiling — but on a
-> software rasteriser, never on a GPU in Resolume, and never in Arena on macOS.
-> The [OpenFX build](#openfx--resolve-vegas-nuke-natron) prints on the CPU and
-> is held against the GPU pixel for pixel — the same card through both comes
-> out identical in **over 99% of pixels**, a mean of **0.002/255** apart — and
-> in DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool, it renders
-> **byte-identical** to the test host. It has never been in Vegas, Nuke or
-> Natron, and its Windows and Linux builds have never rendered in a host.
-> Check it in your own rig before trusting it in a show.
+> measured rather than taken on trust, by an offline harness that drives the real
+> plugin class in a headless GL context: the spot functions match their C++
+> originals (**264,196 points, no disagreement past 1e-5**), printed area follows
+> the dot-gain curve to **1%**, and screen angle and registration come back to
+> **0.06°** and **0.05 px** (see [Status](#status)). The Resolume build has been
+> **registered, loaded and instantiated in Resolume Arena 7.27.1** on Windows, but
+> on a software rasteriser: never on a GPU in Resolume, and never in Arena on macOS.
+> The [OpenFX build](#openfx--resolve-vegas-nuke-natron) matches the GPU in **over
+> 99% of pixels** (a mean of **0.002/255** apart) and renders **byte-identical** to
+> the test host in DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool. It's
+> never been in Vegas, Nuke or Natron, and its Windows and Linux builds have never
+> rendered in a host. Check it in your own rig before you trust it in a show.
 
 Offset litho as an FFGL effect for [Resolume](https://resolume.com) Arena and
 Avenue, and an [OpenFX](https://openeffects.org) effect for DaVinci Resolve,
-Vegas, Nuke and Natron.
+Vegas, Nuke and Natron. Your picture gets separated into cyan, magenta, yellow and
+black, screened at the proper angles and run through a press that never quite lines
+the plates up, so the rosettes, the moiré and the colour fringes turn up on their own.
 
 ![The test card printed: four screens interfering into rosettes, a halftone ramp, and the process primaries](docs/hero.jpg)
 
-<sub>The repo's test card through the plugin at a coarse screen — rendered by
-`rztest`, the offline harness, not captured from Resolume.</sub>
+<sub>The repo's test card through the plugin at a coarse screen, rendered by
+`rztest`, the offline harness, rather than captured from Resolume.</sub>
 
 <!-- downloads:start -->
 
@@ -74,69 +71,69 @@ macOS builds are signed and notarised and open normally. The Windows builds are 
 
 ## A printed picture is four plates and a press
 
-That is the whole design, and everything else follows from it.
+That's the whole design, and everything else follows from it.
 
-A halftone is not a texture laid over a picture. It is four **plates** — cyan,
-magenta, yellow and black — each a lattice of dots at its own **screen angle**,
-laid down one after another by a **press** that never quite registers them.
-Model those two things and the rest is a consequence rather than an effect:
+A halftone is four **plates** (cyan, magenta, yellow and black), each a lattice
+of dots at its own **screen angle**, laid down one after another by a **press**
+that never quite registers them. Model those two things, rather than laying a
+texture over the picture, and the rest is a consequence rather than an effect:
 
-- **Rosettes.** Put the four lattices at the standard angles — C 15°, M 75°,
-  Y 0°, K 45° — and they interfere into the flower printers recognise. Nothing
-  draws it. It is what four screens at those angles *do*.
+- **Rosettes.** Put the four lattices at the standard angles (C 15°, M 75°,
+  Y 0°, K 45°) and they interfere into the flower printers recognise. Nothing
+  draws it; it's what four screens at those angles *do*.
 - **Moiré.** Set two screens to the same angle, or one degree apart, and you get
   the coarse beat that costs a print run. The **Moiré** preset puts magenta at
-  16° against cyan's 15°, and it is real interference between two lattices, not
-  a texture pretending to be one.
+  16° against cyan's 15°, and that's actual interference between two lattices
+  rather than a texture pretending to be one.
 - **Misregistration** is per plate, in pixels, and it **wanders** as the press
-  runs — a slow, bounded drift that puts colour fringes on every edge and moves
-  them. Audio can shake the press.
+  runs: a slow, bounded drift that puts colour fringes on every edge and moves
+  them about. Audio can shake the press.
 - **Dot gain.** Ink spreads into paper, so the midtones fatten. Fifteen points
   is a litho press; thirty is newsprint.
-- **Overprint.** Inks are filters, not lights. They multiply, which is why cyan
-  over yellow is green and why black over anything is black.
+- **Overprint.** Inks are filters rather than lights. They multiply, which is why
+  cyan over yellow is green and black over anything is black.
 
 **Solo** a plate to see its lattice on its own, which is how the angles and the
-screen are actually set.
+screen get set in practice.
 
 [![Rosette — offset litho as an effect, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=SNlf6vpeQvM)
 
-*[Watch it](https://www.youtube.com/watch?v=SNlf6vpeQvM) — 52 seconds: the
+*[Watch it](https://www.youtube.com/watch?v=SNlf6vpeQvM) (52 seconds): the
 screen arriving, each plate soloed at its own angle, the four dot shapes, dot
 gain from none to a newspaper's thirty points, two screens swung together until
-they beat, and the Riso preset. Every frame is the real plugin's output: an FFGL
-plugin has no window, so the footage is rendered by this repository's own
-offline harness (`rztest --pipe`, driven by a cue sheet) rather than filmed off
-a screen, and the clips are Resolume's bundled demo media.*
+they beat, and the Riso preset. It's all the plugin's own output. An FFGL plugin
+doesn't have a window to film, so the footage comes from this repo's offline
+harness (`rztest --pipe`, driven by a cue sheet) rather than a screen, and the
+clips are Resolume's bundled demo media.*
 
 ## The controls
 
-**Separation** — Black Generation (how much of the neutral component moves off
+**Separation:** Black Generation (how much of the neutral component moves off
 the CMY plates onto the black one: 0 prints greys as equal parts cyan, magenta
 and yellow, 1 prints them as black alone) and Total Ink, the limit on how much
 ink one point may carry, 200% to 400%.
 
-**Screen** — Screen (2 to 40 px per dot), Dot Shape, Dot Gain, Ink Spread, and
+**Screen:** Screen (2 to 40 px per dot), Dot Shape, Dot Gain, Ink Spread, and
 an angle per plate.
 
-Four dot shapes, and they are spot functions rather than sprites. **Round**
+Four dot shapes, and they're spot functions rather than sprites. **Round**
 grows a near-circle, turns over through a checkerboard at exactly 50%, and
 inverts into holes. **Elliptical** is the same function with the metric
 stretched, so the dot meets its row neighbours first and chains along the screen
-angle — which is what an elliptical screen is for: no abrupt flip at the
+angle, which is what an elliptical screen is for: no abrupt flip at the
 midtone. **Square** never inverts. **Line** is a band.
 
-**Press** — a registration offset in x and y for each of the four plates, Press
+**Press:** a registration offset in x and y for each of the four plates, Press
 Wander and Wander Speed, and an audio input with Audio Drive.
 
-**Ink** — the four ink colours and the paper, as colour pickers, plus Ink
+**Ink:** the four ink colours and the paper, as colour pickers, plus Ink
 Density, a switch per plate and Solo.
 
-**Output** — Mix.
+**Output:** Mix.
 
 **Six presets:** Offset Litho, Newspaper, Riso 2-Colour, Silkscreen, Moiré,
-Drifting Press. Riso is two plates — the cyan separation on a Riso blue, the
-magenta on fluorescent pink — with no black, no yellow, a coarse screen, a press
+Drifting Press. Riso is two plates (the cyan separation on a Riso blue, the
+magenta on fluorescent pink) with no black, no yellow, a coarse screen, a press
 that drifts and the paper showing through, which is most of what makes a Riso
 look like one.
 
@@ -146,20 +143,20 @@ Resolume hands a plugin a 64-bin spectrum once per frame. Rosette follows it two
 ways at once, because a press has two kinds of error: the level jitters the
 plates continuously, and a detected onset **throws** them, each in its own
 direction, decaying until the next hit. Audio Drive is zero by default, so with
-nothing routed this is an ordinary manual halftone and behaves like one.
+nothing routed it's an ordinary manual halftone and behaves like one.
 
-It is a modulation source at video rate, not a signal source: the smallest
+It's a modulation source at video rate rather than a signal source: the smallest
 interval it can resolve is a frame, so a kick lands up to 17 ms late at 60 fps.
 
 ## OpenFX — Resolve, Vegas, Nuke, Natron
 
 The same effect also builds as an OpenFX plugin, **Rosette** in the
 **Stoatworks** group, so it runs in DaVinci Resolve (Edit and Color pages, and
-Fusion), Vegas Pro, Nuke and Natron. It renders on the CPU, and it is the same
+Fusion), Vegas Pro, Nuke and Natron. It renders on the CPU, and it's the same
 press: the separation, the spot functions and their threshold table, the dot
-gain, the ink model, the wander and the six presets are the very C++ the
+gain, the ink model, the wander and the six presets are the same C++ the
 Resolume build uses, and the per-pixel print pass is a line-for-line mirror of
-the GLSL that is checked against the GPU (below).
+the GLSL that's checked against the GPU (below).
 
 Copy `Rosette.ofx.bundle` from the `rosette-ofx-*` zip for your platform into
 the standard OpenFX folder, then restart the host:
@@ -172,30 +169,30 @@ Linux    /usr/OFX/Plugins/
 
 The Linux build is built against glibc 2.28 so that it loads on Rocky 8, the
 Linux Resolve supports; anything newer loads it too. The OpenFX zips ship from
-v0.2.0 — `rosette-ofx-macos-universal.zip`, `rosette-ofx-windows-x86_64.zip`
-and `rosette-ofx-linux-x86_64.zip`, beside the Resolume ones. v0.1.0 had no
+v0.2.0 (`rosette-ofx-macos-universal.zip`, `rosette-ofx-windows-x86_64.zip`
+and `rosette-ofx-linux-x86_64.zip`, beside the Resolume ones). v0.1.0 had no
 OpenFX build.
 
-**What is different from the Resolume build, and why:**
+**What's different from the Resolume build, and why:**
 
 - **No audio.** OpenFX has no audio to give a plugin, and a timeline renders
-  frames in any order, so there is nothing for an envelope or an onset detector
-  to follow. Audio Drive and the audio input are not there at all rather than
-  there and dead; the plugin's own description says so. No preset touches
+  frames in any order, so there's nothing for an envelope or an onset detector
+  to follow. Audio Drive and the audio input aren't there at all, rather than
+  there and dead, and the plugin's own description says so. No preset touches
   them, so every preset means the same press in both builds.
-- **Presets set the controls.** Resolume will not take values pushed back from
-  a plugin, so there a preset is laid over the sliders while it is selected. An
+- **Presets set the controls.** Resolume won't take values pushed back from
+  a plugin, so there a preset is laid over the sliders while it's selected. An
   OpenFX host will, so here choosing a preset writes its values into the
   controls, as one undo step, and moving any control it covers away from the
   preset's value puts the menu back to Custom. Registration, Solo and Mix are
   left alone by every preset in both builds.
-- **The press runs on the timeline.** The wander is a pure function of time —
-  bounded noise, not an accumulating walk — so it needs no history: any frame
-  renders on its own, in any order, and scrubbing shows the press at that
+- **The press runs on the timeline.** The wander is a pure function of time
+  (bounded noise rather than an accumulating walk), so it needs no history: any
+  frame renders on its own, in any order, and scrubbing shows the press at that
   moment. Time is the frame number over the clip's frame rate. **Resolve's
   Fusion page reports the frame rate on the effect but not on its clips; the
   plugin reads the effect's, and assumes 24 fps only where a host reports
-  none** — so in Fusion, too, Wander Speed follows the timeline's rate.
+  none**, so in Fusion, too, Wander Speed follows the timeline's rate.
 - **The ink colours and the paper are colour pickers** rather than three
   sliders each. Same values, same defaults.
 - **A proxy render should look like the full one.** At a reduced render scale
@@ -211,21 +208,21 @@ card through the real OpenFX plugin in a test host gives the same numbers: at
 the defaults, every preset and eight more settings, at most **0.77%** of pixels
 differ at all, a mean of at most **0.0021/255**, and more than 99.98% of pixels
 are within one 8-bit step. The rest are a handful of pixels per frame that sit
-within a rounding error of a cell boundary — a 45° plate in register puts one
-along the diagonal — where the last bit of the arithmetic decides which cell,
+within a rounding error of a cell boundary (a 45° plate in register puts one
+along the diagonal), where the last bit of the arithmetic decides which cell,
 and so which cell's dot, they belong to. Getting this close meant mirroring the
-GPU's own arithmetic, not just the shader's: the half-float plates buffer, how
+GPU's own arithmetic as well as the shader's: the half-float plates buffer, how
 the driver builds the mip chain, the sampler's fixed-point weights and which
 multiplies its compiler fuses, all measured on the machine (`source/Print.h`
 has the details). Other graphics cards are free to round differently, so the
-Resolume build itself may differ by a similar amount from one GPU to the next;
-nobody has measured that.
+Resolume build itself may differ by a similar amount from one GPU to the next.
+Nobody has measured that.
 
 It costs **37 ms a frame at 1920×1080** on eight threads of an M4 Max.
 
 ## Build
 
-Needs CMake and the Resolume FFGL SDK, which is a submodule.
+You'll need CMake and the Resolume FFGL SDK, which is a submodule.
 
 ```bash
 git clone --recursive https://github.com/stoatworks-labs/rosette
@@ -237,7 +234,7 @@ cmake --install build    # → ~/Documents/Resolume Arena/Extra Effects
 
 That builds both plugins: `Rosette.bundle` (FFGL) and `Rosette.ofx.bundle`
 (OpenFX). macOS builds universal (arm64 + x86_64) by default. Add
-`-DCMAKE_OSX_ARCHITECTURES=arm64` for a faster development build. The OpenFX
+`-DCMAKE_OSX_ARCHITECTURES=arm64` for a quicker development build. The OpenFX
 plugin needs nothing but a compiler: `-DROSETTE_BUILD_FFGL=OFF` builds it alone,
 with no FFGL SDK and no GL loader, which is how Linux builds it.
 
@@ -262,7 +259,7 @@ measures rather than previews:
 
 ## Status
 
-**v0.2.0, and honestly early.** v0.2.0 added the OpenFX build; the Resolume
+**v0.2.0, and still early days.** v0.2.0 added the OpenFX build; the Resolume
 build renders as it did in v0.1.0, and was verified by measurement on an M4
 Max, macOS 26.4, 2026-09-21:
 
@@ -281,7 +278,7 @@ Max, macOS 26.4, 2026-09-21:
 | Host metadata | `oxbow probe` reads **SW Rosette / RZ01 / effect** |
 | Render cost | 0.15 ms/frame at 720p, 0.23 at 1080p, 0.50 at 4K — 3% of a 60 fps frame |
 
-Run `tools/verify.sh` before believing any of it.
+Run `tools/verify.sh` before you believe any of it.
 
 **The OpenFX build**, measured on the same machine, 2026-10-03, by
 `rztest --cpu` and through the real plugin in `ofxprobe`, a CPU OpenFX test
@@ -306,11 +303,11 @@ the first build, which read a clip's, failed every frame in the same place.
 
 **The Resolume build in a real host, once.** On 2026-09-21 an x64 Windows DLL
 was cross-compiled in the Parallels guest on this Mac (ARM64 Windows 11, MSVC 2022 Build Tools,
-`cmake -A x64`, vcpkg triplet `x64-windows-static-md` — there is no x64 Windows
+`cmake -A x64`, vcpkg triplet `x64-windows-static-md`; there's no x64 Windows
 machine in the *local* build loop) and taken to win-lab, an x64 Windows 11 Pro VM
 with **no GPU**, where OpenGL comes from Mesa llvmpipe dropped in beside Arena.
-That is the build in the table below; the released DLL is a separate one, built on
-a GitHub runner, and has not been in front of Arena:
+That's the build in the table below. The released DLL is a separate one, built on
+a GitHub runner, and it hasn't been in front of Arena:
 
 | Check | Result |
 | --- | --- |
@@ -322,41 +319,43 @@ a GitHub runner, and has not been in front of Arena:
 | The log | clean of WARN, ERROR and FAIL |
 
 That was a software rasteriser throughout, so it says nothing about speed:
-**no frame timing was taken on Windows**, and the ms/frame figures above remain
-macOS-only. The effect was applied to the composition rather than to a clip, so
-the proof of instantiation is the diag log, not the clip's effect list.
+**no frame timing was taken on Windows**, and the ms/frame figures above are
+still macOS-only. The effect was applied to the composition rather than to a
+clip, so the proof of instantiation is the diag log rather than the clip's
+effect list.
 
-**Not yet done.** It has **never run on a GPU in Resolume** — the one host run
-was on llvmpipe — and it has **never been instantiated in Arena on macOS**.
+**Not yet done.** It has **never run on a GPU in Resolume** (the one host run
+was on llvmpipe), and it has **never been instantiated in Arena on macOS**.
 Arena drew an inspector for it, but nothing in that inspector was checked
-beyond its appearing, so how the parameters *present* — whether the 49 controls
-in six groups read sensibly, whether the five colour triples show as swatches —
+beyond its appearing, so how the parameters *present* (whether the 49 controls
+in six groups read sensibly, whether the five colour triples show as swatches)
 is still untested. No real audio has reached the plugin in a host; the audio
 path is still only exercised by the harness's synthetic spectra, and
 Resolume's 64-bin FFT mapping is assumed rather than measured. No long session,
-no composition save or reload and no preset recall were exercised in the host,
-and whether the plugin settles on Resolume's clock unit is unconfirmed — see
-[AGENTS.md](AGENTS.md). CI, which builds macOS and x64 Windows, and the release
-workflow have both run and passed on GitHub. **The OpenFX build has been in one
-real host:** DaVinci Resolve Studio 21.1 on macOS, as a Fusion tool, where the
-first build failed every frame because Fusion reports no frame rate on its
-clips, and the fixed one (guarded reads that reach the effect's rate) renders
-byte-identical to the test host. Vegas, Nuke and Natron are untried, and
-`ofxprobe` renders at full scale, 8-bit or float, premultiplied — so a real
-host's proxy render scale, its premultiplication and its parameter panel are
-unconfirmed;
-its Windows and Linux builds have been compiled by CI and the Linux one loaded
-on Rocky 8, and neither has rendered a frame. The `--cpu` agreement is
-measured against an Apple M4's GPU; how far another card's FFGL render sits
-from either is unmeasured. The [browser demo](https://rosette-demo.stoatworks-labs.com)
-runs the plugin's own separation and print shaders ported to WebGL2, and
-`demo/tools/check_shaders.py` holds that GLSL character-for-character against
-`source/Shaders.cpp` — but the Controls, Screen and Press conversions beside it
-are a hand translation and nothing checks those. `ATTRIBUTIONS.md` is still a
-provisional hand copy, and there is no user guide, so the About block
-deliberately carries no guide link.
+no composition save or reload and no preset recall were tried in the host,
+and whether the plugin settles on Resolume's clock unit is unconfirmed (see
+[AGENTS.md](AGENTS.md)). CI, which builds macOS and x64 Windows, and the release
+workflow have both run and passed on GitHub.
 
-[AGENTS.md](AGENTS.md) has the full list of what is assumed rather than
+**The OpenFX build has been in one real host:** DaVinci Resolve Studio 21.1 on
+macOS, as a Fusion tool, where the first build failed every frame because Fusion
+reports no frame rate on its clips, and the fixed one (guarded reads that reach
+the effect's rate) renders byte-identical to the test host. Vegas, Nuke and
+Natron are untried, and `ofxprobe` renders at full scale, 8-bit or float,
+premultiplied, so a real host's proxy render scale, its premultiplication and its
+parameter panel are unconfirmed. Its Windows and Linux builds have been compiled
+by CI and the Linux one loaded on Rocky 8, and neither has rendered a frame. The
+`--cpu` agreement is measured against an Apple M4's GPU; how far another card's
+FFGL render sits from either is unmeasured.
+
+The [browser demo](https://rosette-demo.stoatworks-labs.com) runs the plugin's own
+separation and print shaders ported to WebGL2, and `demo/tools/check_shaders.py`
+holds that GLSL character-for-character against `source/Shaders.cpp`, but the
+Controls, Screen and Press conversions beside it are a hand translation and
+nothing checks those. `ATTRIBUTIONS.md` is still a provisional hand copy, and
+there's no user guide, so the About block carries no guide link, on purpose.
+
+[AGENTS.md](AGENTS.md) has the full list of what's assumed rather than
 measured, and the traps.
 
 ## Licence
