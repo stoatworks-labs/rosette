@@ -21,6 +21,8 @@ Vegas, Nuke and Natron. Your picture gets separated into cyan, magenta, yellow a
 black, screened at the proper angles and run through a press that never quite lines
 the plates up, so the rosettes, the moiré and the colour fringes turn up on their own.
 
+The [project page](https://stoatworks-labs.com/software/rosette/) has the downloads and the video.
+
 ![The test card printed: four screens interfering into rosettes, a halftone ramp, and the process primaries](docs/hero.jpg)
 
 <sub>The repo's test card through the plugin at a coarse screen, rendered by
